@@ -8,6 +8,14 @@ build step, and it talks to the Jellyfin REST and WebSocket APIs directly.
 Built for a **UE43M5602 (2017 M5 series, Tizen 3.0, 1080p)**, but it should run on
 any Tizen TV from 2015 onwards.
 
+## Screenshots
+
+![Home: Continue Watching hero, rows per library](docs/screenshots/01-home.webp)
+
+| Movies | Details |
+| --- | --- |
+| ![Library grid with real posters](docs/screenshots/02-movies.webp) | ![Movie detail with backdrop, logo and cast](docs/screenshots/03-detail.webp) |
+
 ## Download
 
 Grab the signed `JellyLean.wgt` from the [latest release](../../releases/latest) and
