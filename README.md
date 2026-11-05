@@ -8,6 +8,13 @@ build step, and it talks to the Jellyfin REST and WebSocket APIs directly.
 Built for a **UE43M5602 (2017 M5 series, Tizen 3.0, 1080p)**, but it should run on
 any Tizen TV from 2015 onwards.
 
+## Download
+
+Grab the signed `JellyLean.wgt` from the [latest release](../../releases/latest) and
+sideload it with `scripts/install.sh --ip <tv>` — see
+[Build and install](#build-and-install). Builds are signed for Tizen 3.0+, so they
+install on any 2015-or-newer Samsung TV with developer mode enabled.
+
 ## Features
 
 - Server address and login are entered on the TV and stored locally; nothing is
