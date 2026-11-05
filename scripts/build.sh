@@ -111,6 +111,21 @@ if [ ! -s "$WGT" ]; then
     exit 1
 fi
 
+# What Apps2Samsung reads before it will install a package: the <tizen:application>
+# ids, required_version (newer than the TV = refused) and the manifest version.
+# Fail the build here, so a package the catalog cannot install is never released.
+CONFIG="$(unzip -p "$WGT" config.xml 2>/dev/null | tr '\n' ' ')"
+need() {
+    if ! printf '%s' "$CONFIG" | grep -Eq "$1"; then
+        echo "error: config.xml: $2" >&2
+        exit 1
+    fi
+}
+need '<tizen:application[^>]*id="[A-Za-z0-9_]+\.[A-Za-z0-9_]+"' "no valid tizen:application id"
+need '<tizen:application[^>]*package="[A-Za-z0-9_]+"' "no valid package id (Apps2Samsung needs it to upgrade in place)"
+need '<tizen:application[^>]*required_version="[0-9]+\.[0-9]+"' "no required_version (Tizen refuses an install without it)"
+need '<widget[^>]*version="[0-9]+\.[0-9]+\.[0-9]+"' "no widget version"
+
 echo ""
 echo "Built: $WGT ($(du -h "$WGT" | cut -f1))"
 if unzip -l "$WGT" 2>/dev/null | grep -q 'signature1.xml'; then

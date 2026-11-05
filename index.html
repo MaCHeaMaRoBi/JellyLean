@@ -27,8 +27,13 @@
         box.textContent = 'JellyLean could not start\n\n' + lines.slice(0, 6).join('\n');
     }
     window.__bootLog = function (text) { lines.push(text); show(); };
+    /* Only a failure before the first screen paints is a startup failure. Once
+       the UI is up, one missing poster must not cover it with this panel — and
+       an image URL carries the access token, so it is never drawn. */
     window.addEventListener('error', function (e) {
-        var src = e.target && e.target.src ? 'failed to load ' + e.target.src :
+        var app = document.getElementById('app');
+        if (app && app.firstChild) return;
+        var src = e.target && e.target.src ? 'failed to load ' + String(e.target.src).split('?')[0] :
             (e.message + ' (' + String(e.filename || '').split('/').pop() + ':' + e.lineno + ')');
         window.__bootLog(src);
     }, true);

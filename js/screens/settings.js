@@ -186,7 +186,7 @@
             var device = statusBlock('set-device', 'Server and device details');
             device.line.innerHTML = 'Engine: <b>' + (Player.hasAvplay ? 'AVPlay (native)' : 'HTML5 (development fallback)') + '</b>' +
                 '<br>Device ID: ' + U.esc(Store.deviceId().slice(0, 12)) + '…' +
-                '<br>Client: JellyLean 1.0.0' +
+                '<br>Client: JellyLean ' + Api.version +
                 (lastPlaybackLine() ? '<br>' + lastPlaybackLine() : '');
             list.appendChild(device.box);
 

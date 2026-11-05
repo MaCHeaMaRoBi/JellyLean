@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <widget xmlns:tizen="http://tizen.org/ns/widgets" xmlns="http://www.w3.org/ns/widgets"
-        id="http://localhost/JellyfinLean" version="1.0.0" viewmodes="fullscreen">
+        id="http://localhost/JellyfinLean" version="1.0.1" viewmodes="fullscreen">
 
     <access origin="*" subdomains="true"/>
 
     <tizen:application id="jflean0001.JellyfinLean" package="jflean0001" required_version="2.3"/>
 
-    <author href="https://jellyfin.org" email="noreply@localhost">JellyLean</author>
+    <author href="https://github.com/MaCHeaMaRoBi/JellyLean">JellyLean</author>
     <name>JellyLean</name>
     <description>Lightweight Jellyfin client for Samsung Tizen TVs (3.0+)</description>
     <icon src="icon.png"/>
@@ -20,7 +20,6 @@
     <tizen:privilege name="http://tizen.org/privilege/internet"/>
     <tizen:privilege name="http://tizen.org/privilege/tv.inputdevice"/>
     <tizen:privilege name="http://developer.samsung.com/privilege/avplay"/>
-    <tizen:privilege name="http://developer.samsung.com/privilege/productinfo"/>
 
     <tizen:setting screen-orientation="landscape" context-menu="disable" background-support="disable"
                    encryption="disable" install-location="auto" hwkey-event="enable"/>

@@ -4,7 +4,7 @@
     'use strict';
 
     var CLIENT_NAME = 'JellyLean';
-    var CLIENT_VERSION = '1.0.0';
+    var CLIENT_VERSION = '1.0.1';
 
     /* What the browse screens need to draw a card and the Home stage: art for
        every role (backdrop and logo feed the ambient stage) and the text that
@@ -26,6 +26,7 @@
        showing "HTTP 401" until the viewer finds Sign Out. */
     var unauthorizedHandler = null;
     var unauthorizedNotified = false;
+    var REQUEST_TIMEOUT_MS = 20000;
 
     function notifyUnauthorized() {
         if (!state.token || unauthorizedNotified) return;
@@ -131,17 +132,34 @@
             return xhrRequest(method, target, payload);
         }
 
+        /* A TV on Wi-Fi can reach a server that never answers; without a
+           timeout the promise never settles and the awaiting screen stays
+           blank forever. The XHR fallback already had this. */
+        var controller = global.AbortController ? new global.AbortController() : null;
+        var timer = controller ? setTimeout(function () { controller.abort(); }, REQUEST_TIMEOUT_MS) : null;
+        function settle() { if (timer) { clearTimeout(timer); timer = null; } }
+
         return fetch(target, {
             method: method,
             headers: buildHeaders(payload !== null),
             body: payload,
-            cache: 'no-store'
+            cache: 'no-store',
+            signal: controller ? controller.signal : undefined
         }).then(function (response) {
             return response.text().then(function (text) {
                 if (!response.ok) throw failure(response.status, text);
                 if (!text) return null;
                 try { return JSON.parse(text); } catch (e) { return text; }
             });
+        }).then(function (result) {
+            settle();
+            return result;
+        }, function (error) {
+            settle();
+            if (controller && error && error.name === 'AbortError') {
+                throw new ApiError(0, 'The server did not respond');
+            }
+            throw error;
         });
     }
 
@@ -251,6 +269,9 @@
 
     var Api = {
         Error: ApiError,
+
+        /* The version in config.xml, so Settings and the media header cannot drift. */
+        version: CLIENT_VERSION,
 
         configure: function (config) {
             state.base = normalizeServerUrl(config.serverUrl || '');

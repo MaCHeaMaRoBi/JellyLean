@@ -30,6 +30,12 @@
     var stallTimer = null;
     var stallEmitted = false;
     var stallArmedAt = 0;
+    var stallBaseMs = 0;
+
+    /* AVPlay reports prepare results and errors asynchronously, and a closed
+       session still delivers them. Every callback is tied to the open that
+       created it, so a stale one cannot seek, play or error the new stream. */
+    var generation = 0;
 
     var Player = U.emitter({});
 
@@ -65,11 +71,17 @@
         stopWatchdog();
         stallEmitted = false;
         stallArmedAt = Date.now();
+        /* Progress is measured against where this open started: a resume at
+           0:30 already has positionMs above the threshold before any frame has
+           decoded, which used to disable the check for every resumed item. */
+        stallBaseMs = state.positionMs;
         var limit = limitMs || 12000;
         stallTimer = setInterval(function () {
             if (stallEmitted) return;
+            /* A paused player never reports progress; that is not a stall. */
+            if (state.paused) { stallArmedAt = Date.now(); return; }
             if (Date.now() - stallArmedAt < limit) return;
-            if (state.positionMs > 1500) { stopWatchdog(); return; }
+            if (state.positionMs > stallBaseMs + 1500) { stopWatchdog(); return; }
             stallEmitted = true;
             Player.emit('stalled', state.mode);
         }, 2000);
@@ -96,7 +108,7 @@
 
     /* ------------------------------------------------------------- AVPlay */
 
-    function avplayOpen(options) {
+    function avplayOpen(options, gen) {
         surfaceEl = U.$('#avplaySurface');
         if (surfaceEl) surfaceEl.classList.remove('hidden');
 
@@ -110,16 +122,19 @@
 
         av.setListener({
             oncurrentplaytime: function (ms) {
+                if (gen !== generation) return;
                 state.positionMs = ms;
             },
-            onbufferingstart: function () { Player.emit('buffering', true); },
-            onbufferingprogress: function (percent) { Player.emit('buffering-progress', percent); },
-            onbufferingcomplete: function () { Player.emit('buffering', false); },
+            onbufferingstart: function () { if (gen !== generation) return; Player.emit('buffering', true); },
+            onbufferingprogress: function (percent) { if (gen !== generation) return; Player.emit('buffering-progress', percent); },
+            onbufferingcomplete: function () { if (gen !== generation) return; Player.emit('buffering', false); },
             onstreamcompleted: function () {
+                if (gen !== generation) return;
                 state.paused = true;
                 Player.emit('ended');
             },
             onevent: function (eventType) {
+                if (gen !== generation) return;
                 if (eventType === 'PLAYING') {
                     if (state.paused) {
                         state.paused = false;
@@ -135,6 +150,7 @@
                 }
             },
             onerror: function (error) {
+                if (gen !== generation) return;
                 Player.emit('error', (error && (error.message || error.name)) || 'AVPlay error');
             },
             onsubtitlechange: function () { /* subtitles are server-rendered/off */ },
@@ -142,6 +158,7 @@
         });
 
         av.prepareAsync(function () {
+            if (gen !== generation) return;
             state.opened = true;
             try { state.durationMs = av.getDuration() || 0; } catch (e) { state.durationMs = 0; }
 
@@ -169,6 +186,7 @@
                 } catch (e) { Player.emit('error', String(e)); }
             }
         }, function (error) {
+            if (gen !== generation) return;
             state.opened = false;
             Player.emit('error', (error && (error.message || error.name)) || 'Unable to open stream');
         });
@@ -213,7 +231,7 @@
         return videoEl;
     }
 
-    function html5Open(options) {
+    function html5Open(options, gen) {
         var node = ensureVideoElement();
         node.classList.remove('hidden');
         node.src = options.url;
@@ -222,6 +240,8 @@
 
         node.addEventListener('loadedmetadata', function onMeta() {
             node.removeEventListener('loadedmetadata', onMeta);
+            /* Metadata for a replaced item must not seek or play the new one. */
+            if (gen !== generation) return;
             state.opened = true;
             if (options.startMs > 0) {
                 try { node.currentTime = options.startMs / 1000; } catch (e) { /* ignore */ }
@@ -249,6 +269,7 @@
 
     Player.open = function (options) {
         Player.close();
+        var gen = ++generation;
         state.url = options.url;
         state.item = options.item || null;
         state.mediaSource = options.mediaSource || null;
@@ -263,12 +284,12 @@
 
         if (state.mode === 'avplay') {
             try {
-                avplayOpen(options);
+                avplayOpen(options, gen);
             } catch (e) {
                 Player.emit('error', String(e));
             }
         } else {
-            html5Open(options);
+            html5Open(options, gen);
         }
 
         /* A transcode warms up before its first segment exists, so the caller
@@ -328,6 +349,8 @@
     Player.getLastSeekTarget = function () { return lastSeekTarget; };
 
     Player.close = function () {
+        /* Invalidate every callback the previous open left in flight. */
+        generation++;
         stopTicker();
         stopWatchdog();
         if (state.mode === 'avplay' && av) {

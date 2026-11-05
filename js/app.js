@@ -193,6 +193,15 @@
         }, false);
     }
 
+    /* Samsung does not pause AVPlay when the app is hidden, so audio keeps
+       playing under the TV menu after HOME or standby. */
+    function bindLifecycle() {
+        document.addEventListener('visibilitychange', function () {
+            var P = global.Player;
+            if (document.hidden && P && P.isOpen() && !P.isPaused()) P.pause();
+        });
+    }
+
     function registerTvKeys() {
         var tvinput = global.tizen && global.tizen.tvinput;
         if (!tvinput || !tvinput.registerKey) return;
@@ -445,6 +454,7 @@
         }
 
         bindKeys();
+        bindLifecycle();
         registerTvKeys();
 
         /* A dead token must not leave every screen stuck on HTTP 401. */
