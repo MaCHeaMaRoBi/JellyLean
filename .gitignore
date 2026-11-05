@@ -1,0 +1,19 @@
+dist/
+.dev/
+.buildResult/
+*.wgt
+*.zip
+node_modules/
+.build/
+
+# Local agent skills (third-party, installed from their own repos)
+.agents/
+skills-lock.json
+
+# Graphify knowledge graph (generated; rebuild with: graphify extract . --code-only)
+graphify-out/
+# Playwright CLI output (may contain credentials)
+.playwright-cli/
+
+# Local secrets — never commit
+*.env

@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>JellyLean</title>
+<meta name="viewport" content="width=1920, height=1080">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#0a0a0b">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<script>
+/* Startup diagnostics: a TV has no console, so an early failure is painted on
+   screen instead of leaving only the splash banner. */
+(function () {
+    var lines = [];
+    function show() {
+        if (!document.body) return;
+        var box = document.getElementById('bootError');
+        if (!box) {
+            box = document.createElement('pre');
+            box.id = 'bootError';
+            box.style.cssText = 'position:fixed;left:96px;top:54px;right:96px;z-index:99999;margin:0;' +
+                'padding:32px;background:#0c1017;color:#ff8b84;font:28px/1.4 monospace;white-space:pre-wrap;';
+            document.body.appendChild(box);
+        }
+        box.textContent = 'JellyLean could not start\n\n' + lines.slice(0, 6).join('\n');
+    }
+    window.__bootLog = function (text) { lines.push(text); show(); };
+    window.addEventListener('error', function (e) {
+        var src = e.target && e.target.src ? 'failed to load ' + e.target.src :
+            (e.message + ' (' + String(e.filename || '').split('/').pop() + ':' + e.lineno + ')');
+        window.__bootLog(src);
+    }, true);
+    /* Bundled fonts are fetched only after the page has loaded and painted, so a
+       slow or failing font file can never hold up the launch screen. Until then
+       the Samsung One fallback is used. */
+    window.addEventListener('load', function () {
+        setTimeout(function () {
+            var link = document.createElement('link');
+            link.rel = 'stylesheet';
+            link.href = 'css/fonts.css';
+            document.head.appendChild(link);
+        }, 1200);
+    });
+    window.addEventListener('load', function () {
+        setTimeout(function () {
+            var app = document.getElementById('app');
+            if (app && !app.firstChild) window.__bootLog('Nothing rendered after load.');
+        }, 4000);
+    });
+})();
+</script>
+
+<div id="app" class="screen-root"></div>
+
+<!-- Video layers. AVPlay draws beneath the web page, so all video chrome lives in #osd above it. -->
+<div id="stage" class="hidden">
+    <div id="avplaySurface"></div>
+    <!-- Hidden until the HTML5 engine asks for it; the TV uses AVPlay, which
+         paints on a plane *behind* the page and must not be covered. -->
+    <video id="html5Video" class="hidden" playsinline preload="auto"></video>
+    <div id="subtitleLayer" class="subtitle-layer hidden"></div>
+</div>
+
+<div id="osd" class="hidden">
+    <div class="osd-top">
+        <div id="osdTitle" class="osd-title"></div>
+        <div id="osdBadges" class="osd-badges"></div>
+    </div>
+
+    <div class="osd-center">
+        <div id="osdCenterLabel" class="osd-center-label"></div>
+    </div>
+
+    <!-- Playback info panel, toggled by the info button or the remote's INFO key. -->
+    <div id="playbackInfo" class="playback-info hidden" role="region"
+         aria-label="Playback information"></div>
+
+    <!-- Subtitle picker. Built in js/screens/player-screen.js from the source's
+         MediaStreams so every track, including image tracks, is listed. -->
+    <div id="subtitlePanel" class="subtitle-panel hidden" role="dialog"
+         aria-label="Subtitles">
+        <div class="panel-title">Subtitles</div>
+        <div id="subtitleList" class="sub-list" role="listbox" aria-label="Subtitle tracks"></div>
+        <div class="panel-hint">OK selects &middot; BACK closes</div>
+    </div>
+
+    <!-- Audio picker. A remux can carry TrueHD plus AC3; only this lets the
+         viewer pick the track the TV can actually decode. -->
+    <div id="audioPanel" class="subtitle-panel hidden" role="dialog"
+         aria-label="Audio tracks">
+        <div class="panel-title">Audio</div>
+        <div id="audioList" class="sub-list" role="listbox" aria-label="Audio tracks"></div>
+        <div class="panel-hint">OK selects &middot; BACK closes</div>
+    </div>
+
+    <div class="osd-bottom">
+        <div id="skipBar" class="skip-bar hidden">
+            <button id="skipBtn" class="skip-btn" data-focusable tabindex="-1">Skip Intro</button>
+        </div>
+        <!-- Built in js/screens/player-screen.js so the icons come from Icons. -->
+        <div id="osdButtons" class="osd-buttons" role="group" aria-label="Playback controls"></div>
+        <div class="progress-wrap">
+            <div id="progressTrack" class="progress-track" role="progressbar"
+             aria-label="Playback progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+                <div id="progressFill" class="progress-fill"></div>
+                <div id="progressHead" class="progress-head"></div>
+            </div>
+            <div class="progress-times">
+                <span id="timeCurrent">0:00</span>
+                <span id="timeTotal">0:00</span>
+            </div>
+        </div>
+        <div class="osd-controls">
+            <span id="ctlState" class="ctl-state"></span>
+            <span id="osdHint" class="osd-hint">OK Play/Pause &middot; &#8592;&#8594; Seek &middot; &#8593; Controls &middot; BACK Exit</span>
+        </div>
+    </div>
+</div>
+
+<!-- Up Next lives outside #osd: the player is already torn down when it
+     appears, so it needs its own layer and its own key handling. -->
+<div id="upNextOverlay" class="upnext hidden" role="dialog" aria-label="Up next"></div>
+
+<div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
+
+<!-- Samsung's AVPlay (hardware decode) lives in $WEBAPIS, a virtual path that
+     only the TV's web engine resolves. Without this include window.webapis is
+     undefined, the player silently falls back to <video>, and an MKV with
+     AC3/DTS audio renders as a black screen. -->
+<script src="$WEBAPIS/webapis/webapis.js"></script>
+
+<script src="js/util.js"></script>
+<script src="js/store.js"></script>
+<script src="js/api.js"></script>
+<script src="js/seerr.js"></script>
+<script src="js/icons.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/player.js"></script>
+<script src="js/subtitles.js"></script>
+<script src="js/skipintro.js"></script>
+<script src="js/syncplay.js"></script>
+<script src="js/screens/setup.js"></script>
+<script src="js/screens/home.js"></script>
+<script src="js/screens/library.js"></script>
+<script src="js/screens/detail.js"></script>
+<script src="js/screens/discover.js"></script>
+<script src="js/screens/search.js"></script>
+<script src="js/screens/settings.js"></script>
+<script src="js/screens/syncplay-screen.js"></script>
+<script src="js/screens/player-screen.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
