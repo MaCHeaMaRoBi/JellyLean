@@ -4,6 +4,8 @@
     'use strict';
 
     var CLIENT_NAME = 'JellyLean';
+    /* Must equal the widget version in config.xml; scripts/build.sh fails the
+       build when they differ. */
     var CLIENT_VERSION = '1.0.3';
 
     /* What the browse screens need to draw a card and the Home stage: art for
@@ -299,6 +301,22 @@
         notifyUnauthorized: notifyUnauthorized,
 
         normalizeServerUrl: normalizeServerUrl,
+
+        /* True for plain http:// to anything that is not a private-network or
+           .local host, i.e. credentials would cross the open internet unencrypted. */
+        isInsecureRemote: function (serverUrl) {
+            var value = normalizeServerUrl(serverUrl);
+            if (!/^http:\/\//i.test(value)) return false;
+            var host = value.replace(/^http:\/\//i, '').split(/[\/?#]/)[0]
+                .replace(/^.*@/, '').replace(/:\d+$/, '').toLowerCase();
+            if (host === 'localhost' || /\.(local|lan|home|internal)$/.test(host)) return false;
+            if (!/\./.test(host)) return false; /* bare hostname: LAN name */
+            var m = host.match(/^(\d+)\.(\d+)\.\d+\.\d+$/);
+            if (!m) return true;
+            var a = +m[1], b = +m[2];
+            return !(a === 10 || a === 127 || (a === 192 && b === 168) ||
+                (a === 172 && b >= 16 && b <= 31) || (a === 169 && b === 254));
+        },
 
         get base() { return state.base; },
         get token() { return state.token; },

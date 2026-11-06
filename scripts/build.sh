@@ -29,6 +29,14 @@ if [ ! -f "$ROOT/config.xml" ] || [ ! -f "$ROOT/index.html" ]; then
     exit 1
 fi
 
+# The version in config.xml and js/api.js must match.
+CFG_VER="$(tr '\n' ' ' < "$ROOT/config.xml" | sed -n 's/.*<widget[^>]* version="\([0-9.]*\)".*/\1/p')"
+API_VER="$(sed -n "s/.*CLIENT_VERSION = '\([0-9.]*\)'.*/\1/p" "$ROOT/js/api.js" | head -1)"
+if [ -z "$CFG_VER" ] || [ "$CFG_VER" != "$API_VER" ]; then
+    echo "error: version mismatch: config.xml=$CFG_VER, js/api.js=$API_VER" >&2
+    exit 1
+fi
+
 # ---------------------------------------------------------------- toolchain
 TIZEN=""
 for candidate in "$(command -v tizen 2>/dev/null || true)" \

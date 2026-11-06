@@ -98,6 +98,13 @@
             '<button class="btn ghost" id="backBtn" data-focusable tabindex="-1">Back</button>' +
             '</div>';
 
+        if (Api.isInsecureRemote(pendingServer.url)) {
+            var warn = U.el('div', 'err', 'Warning: this address uses plain HTTP over the internet, so your ' +
+                'password is sent unencrypted. Prefer an https:// address.');
+            var sub = wrap.querySelector('.form-sub');
+            if (sub && sub.nextSibling) wrap.insertBefore(warn, sub.nextSibling);
+        }
+
         rootEl.appendChild(wrap);
 
         var username = U.$('#username');

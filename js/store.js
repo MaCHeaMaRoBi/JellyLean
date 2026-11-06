@@ -25,6 +25,15 @@
 
     function randomHex(length) {
         var out = '';
+        var c = global.crypto || global.msCrypto;
+        if (c && c.getRandomValues && global.Uint8Array) {
+            var bytes = new Uint8Array(Math.ceil(length / 2));
+            c.getRandomValues(bytes);
+            for (var b = 0; b < bytes.length; b++) {
+                out += (bytes[b] < 16 ? '0' : '') + bytes[b].toString(16);
+            }
+            return out.slice(0, length);
+        }
         var alphabet = '0123456789abcdef';
         for (var i = 0; i < length; i++) {
             out += alphabet.charAt(Math.floor(Math.random() * 16));
