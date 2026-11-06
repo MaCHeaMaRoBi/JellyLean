@@ -30,7 +30,14 @@
         syncEnabled: false,
         lastDiff: 0,
         lastSyncCheck: 0,
-        playbackActive: false
+        playbackActive: false,
+        /* Idle | Waiting | Paused | Playing, from StateUpdate messages. */
+        groupState: null,
+        /* Buffering/ready reports caused by our own corrective seeks must not
+           reach the server: it would pause the whole group and answer with a
+           fresh Pause/Unpause that makes this client seek again. */
+        quietUntil: 0,
+        bufferingReported: false
     };
 
     var socket = null;
@@ -51,6 +58,9 @@
 
     function localToRemote(date) { return new Date(date.getTime() + state.timeOffset); }
     function remoteToLocal(date) { return new Date(date.getTime() - state.timeOffset); }
+
+    function quiet(ms) { state.quietUntil = Date.now() + ms; }
+    function isQuiet() { return Date.now() < state.quietUntil; }
 
     function clearCommandTimer() {
         if (commandTimer) { clearTimeout(commandTimer); commandTimer = null; }
@@ -92,7 +102,10 @@
                 break;
 
             case 'StateUpdate':
-                if (data) SyncPlay.emit('state', data.State, data.Reason);
+                if (data) {
+                    state.groupState = data.State || null;
+                    SyncPlay.emit('state', data.State, data.Reason);
+                }
                 break;
 
             case 'PlayQueue':
@@ -293,6 +306,13 @@
             return;
         }
 
+        /* WebSocket delivery can reorder; an older command must never undo a
+           newer one. */
+        if (state.lastCommand && state.lastCommand.EmittedAt &&
+                emittedAt.getTime() < state.lastCommand.EmittedAt.getTime()) {
+            return;
+        }
+
         state.lastCommand = command;
 
         if (!state.playbackActive) {
@@ -323,11 +343,20 @@
 
         SyncPlay.emit('command', command);
 
+        /* Server rules this relies on: a Ready report while the group is NOT
+           waiting is answered by re-sending the current command, so replying
+           to Pause/Unpause with Ready (or with a seek-induced Buffering) makes
+           the TV pause, resume and seek in a loop. Only a Seek command, which
+           puts the group in Waiting, is acknowledged with Ready. */
         switch (command.Command) {
             case 'Unpause':
                 run(function () {
-                    if (Math.abs(Player.getPosition() - positionMs) > 400) {
-                        Player.seekTo(positionMs);
+                    /* A late command means the group has moved on since `When`. */
+                    var late = Math.max(0, Date.now() - whenLocal);
+                    var target = positionMs + late;
+                    if (Math.abs(Player.getPosition() - target) > 400) {
+                        quiet(2500);
+                        Player.seekTo(target);
                     }
                     Player.resume();
                     syncTimer = setTimeout(function () { state.syncEnabled = true; }, 1500);
@@ -337,18 +366,20 @@
             case 'Pause':
                 run(function () {
                     Player.pause();
-                    setTimeout(function () {
+                    if (Math.abs(Player.getPosition() - positionMs) > 400) {
+                        quiet(2500);
                         Player.seekTo(positionMs);
-                        reportReady();
-                    }, 150);
+                    }
                 });
                 break;
 
             case 'Seek':
                 run(function () {
+                    quiet(2500);
                     Player.pause();
                     Player.seekTo(positionMs);
-                    setTimeout(reportReady, 700);
+                    /* The group is Waiting after a Seek and expects Ready. */
+                    setTimeout(function () { reportReady(true); }, 700);
                 });
                 break;
 
@@ -372,16 +403,26 @@
         };
     }
 
-    function reportReady() {
+    /* `force` is for moments the server is known to be waiting for us (after a
+       Seek command, or when a playback has just started). Otherwise Ready is
+       only sent while the group is Waiting. */
+    function reportReady(force) {
         if (!state.enabled) return;
+        if (force !== true && state.groupState !== 'Waiting') return;
+        state.bufferingReported = false;
         Api.syncPlayReady(bufferBody());
     }
 
     function reportBuffering(isBuffering) {
         if (!state.enabled) return;
-        var body = bufferBody();
-        if (isBuffering) Api.syncPlayBuffering(body);
-        else Api.syncPlayReady(body);
+        if (isBuffering) {
+            if (isQuiet()) return;
+            state.bufferingReported = true;
+            Api.syncPlayBuffering(bufferBody());
+        } else if (state.bufferingReported) {
+            /* Only owe a Ready when we told the group we were buffering. */
+            reportReady(true);
+        }
     }
 
     /* ---------------------------------------------------------- public API */
@@ -421,6 +462,9 @@
         state.syncEnabled = false;
         state.lastCommand = null;
         state.queuedCommand = null;
+        state.groupState = null;
+        state.bufferingReported = false;
+        state.quietUntil = 0;
         state.enabledAt = parseDate(groupInfo.LastUpdatedAt) || new Date();
         state.pings = 0;
 
@@ -443,6 +487,9 @@
         state.queuedCommand = null;
         state.enabledAt = null;
         state.syncEnabled = false;
+        state.groupState = null;
+        state.bufferingReported = false;
+        state.quietUntil = 0;
         clearCommandTimer();
         stopTimeSync();
 
@@ -524,7 +571,7 @@
 
     SyncPlay.onPlaybackStarted = function () {
         state.playbackActive = true;
-        reportReady();
+        reportReady(true);
     };
 
     SyncPlay.onPlaybackStopped = function () {
@@ -535,9 +582,10 @@
         reportBuffering(isBuffering);
     };
 
-    SyncPlay.onSeeked = function () {
-        reportReady();
-    };
+    /* Seeks inside a group always arrive as Seek/Pause/Unpause commands, which
+       acknowledge themselves. AVPlay also fires 'seeked' synchronously for our
+       own corrective seeks, so reporting it would only provoke the server. */
+    SyncPlay.onSeeked = function () {};
 
     /* Drift correction, called from the player's timeupdate. */
     SyncPlay.syncTick = function (positionMs) {
@@ -560,6 +608,7 @@
 
         if (Math.abs(diff) > 400) {
             state.syncEnabled = false;
+            quiet(2500);
             Player.seekTo(expectedMs);
             SyncPlay.emit('resync', diff);
             syncTimer = setTimeout(function () { state.syncEnabled = true; }, 1500);
@@ -592,7 +641,7 @@
         return state.playlist[index].ItemId;
     };
 
-    SyncPlay.reportReady = reportReady;
+    SyncPlay.reportReady = function () { reportReady(false); };
     SyncPlay.reportBuffering = reportBuffering;
 
     global.SyncPlay = SyncPlay;
