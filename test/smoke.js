@@ -852,6 +852,22 @@ async function main() {
         check('settings buttons carry icons', topIcons >= 2, String(topIcons));
         check('settings reports the last negotiated stream', /Last playback: /.test(diagnostics), diagnostics);
 
+        /* The transcode URL is where the resolution is pinned now that the
+           bitrate is uncapped: whatever the server chose, and whatever the
+           source was, the client asks for at most 1920x1080. */
+        var limited = await evaluate("(function () {" +
+            "  return [" +
+            "    Api.limitResolution('http://h/videos/1/master.m3u8')," +
+            "    Api.limitResolution('http://h/v?width=3840&height=2160&VideoCodec=h264')," +
+            "    Api.limitResolution('http://h/v?maxWidth=3840&maxHeight=2160&VideoBitrate=99')" +
+            "  ];" +
+            "})()");
+        check('transcode URL pinned to 1920x1080',
+            limited[0] === 'http://h/videos/1/master.m3u8?maxWidth=1920&maxHeight=1080' &&
+            limited[1] === 'http://h/v?VideoCodec=h264&maxWidth=1920&maxHeight=1080' &&
+            limited[2] === 'http://h/v?VideoBitrate=99&maxWidth=1920&maxHeight=1080',
+            JSON.stringify(limited));
+
         var qualityRow = await evaluate("Array.prototype.some.call(document.querySelectorAll('.list-title')," +
             " function (n) { return n.textContent === 'Transcode quality'; })");
         check('no transcode bitrate setting', qualityRow === false);

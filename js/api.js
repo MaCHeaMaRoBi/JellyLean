@@ -4,7 +4,7 @@
     'use strict';
 
     var CLIENT_NAME = 'JellyLean';
-    var CLIENT_VERSION = '1.0.1';
+    var CLIENT_VERSION = '1.0.2';
 
     /* What the browse screens need to draw a card and the Home stage: art for
        every role (backdrop and logo feed the ambient stage) and the text that

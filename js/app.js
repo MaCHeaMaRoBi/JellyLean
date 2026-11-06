@@ -333,7 +333,7 @@
             return Api.negotiate(item.Id, {
                 startTicks: startTicks,
                 forceTranscode: true,
-                    subtitleIndex: image.Index,
+                subtitleIndex: image.Index,
                 audioIndex: opts.audioIndex,
                 mediaSourceId: result.source.Id
             }).then(function (burned) {
