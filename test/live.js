@@ -88,7 +88,10 @@ async function main() {
         console.error('Set JF_URL, JF_USER and JF_PASS. Nothing was sent anywhere until you do.');
         process.exit(2);
     }
-    JF_URL = JF_URL.replace(/^https?:\/\//, '').replace(/\/+$/, '');
+    /* Keep the scheme: an https-only server (a reverse proxy) refuses the
+       http:// the app would otherwise assume. A bare host:port still works,
+       because normalizeServerUrl adds http://. */
+    JF_URL = JF_URL.replace(/\/+$/, '');
 
     var chromePath = findChrome();
     var profile = fs.mkdtempSync(path.join(os.tmpdir(), 'jflean-live-'));

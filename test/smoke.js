@@ -190,9 +190,11 @@ async function main() {
             errors.push('log: ' + entry.text + (entry.url ? ' (' + entry.url + ')' : ''));
         });
 
+
         await cdp.send('Page.enable');
         await cdp.send('Runtime.enable');
         await cdp.send('Log.enable');
+        
         await cdp.send('Emulation.setDeviceMetricsOverride', {
             width: 1920, height: 1080, deviceScaleFactor: 1, mobile: false
         });
