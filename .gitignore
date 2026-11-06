@@ -17,3 +17,14 @@ graphify-out/
 
 # Local secrets — never commit
 *.env
+
+# Signing material and release artifacts: never commit these
+*.p12
+*.pfx
+*.pem
+*.key
+*.csr
+author-signature.xml
+signature*.xml
+.tizen-certs/
+*.log

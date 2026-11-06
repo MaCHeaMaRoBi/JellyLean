@@ -1,6 +1,6 @@
 # PRODUCT.md
 
-_Written from the repository's own README/HANDOFF (no interview was possible; see the redesign summary)._
+_Written from the repository's own README (no interview was possible; see the redesign summary)._
 
 ## What it is
 

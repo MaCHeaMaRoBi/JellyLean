@@ -481,3 +481,31 @@ launch it with `tizen run -p jflean0001`.
 MIT — see [LICENSE](LICENSE). Bundled fonts (Figtree, Bricolage Grotesque) are
 licensed under the SIL Open Font License 1.1; their license texts are in
 [`fonts/`](fonts/).
+
+## Disclaimer and third-party notices
+
+JellyLean is an independent, unofficial project. It is **not affiliated with,
+endorsed by, or sponsored by** the Jellyfin project, Samsung Electronics, the
+Seerr / Jellyseerr / Overseerr projects, or TMDB. Jellyfin, Samsung, Tizen,
+AVPlay, Seerr and TMDB are trademarks or property of their respective owners and
+are used here only to describe compatibility.
+
+- **Jellyfin** is free software; this client talks to its public REST and
+  WebSocket APIs and contains none of its code.
+- **Samsung Tizen / AVPlay** (`$WEBAPIS/webapis/webapis.js`) is provided by the TV
+  firmware at runtime and is not redistributed here.
+- **Litefin plugin** ([MoazSalem/litefin-plugin](https://github.com/MoazSalem/litefin-plugin)):
+  the optional Discover tab calls this server-side plugin's `/Litefin/Seerr/*`
+  routes. It is a separate project with its own license and is not bundled.
+- **TMDB / JustWatch**: Discover artwork and "Where to Watch" data are served
+  from TMDB's image CDN (`image.tmdb.org`) and come from TMDB and JustWatch.
+  This product uses the TMDB API but is not endorsed or certified by TMDB.
+- **Fonts**: Figtree and Bricolage Grotesque, SIL Open Font License 1.1.
+
+Movie and show artwork seen in a running app belongs to its rights holders and
+comes from your own server; none is shipped in this repository.
+
+## Security
+
+See [SECURITY.md](SECURITY.md) for how to report a vulnerability and for the
+known limits of the app's security model.
