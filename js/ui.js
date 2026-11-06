@@ -28,8 +28,11 @@
         return hue;
     }
 
+    /* A Series is a folder on the server, but it opens the detail screen: the
+       season bar there asks for episodes by SeasonId, while a folder listing
+       of a season can come back with the specials mixed in. */
     function isFolder(item) {
-        return !!item && (item.IsFolder || item.Type === 'Folder' ||
+        return !!item && item.Type !== 'Series' && (item.IsFolder || item.Type === 'Folder' ||
             item.Type === 'CollectionFolder' || item.Type === 'Season');
     }
 

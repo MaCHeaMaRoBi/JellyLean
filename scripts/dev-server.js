@@ -61,9 +61,25 @@ var SERIES = {
     ImageTags: { Primary: 'series1' }, ChildCount: 2, Status: 'Continuing'
 };
 
+var SEASON0 = {
+    Id: 'season0', Name: 'Specials', Type: 'Season', SeriesId: 'series1',
+    IndexNumber: 0, ImageTags: { Primary: 'season0' }
+};
+
 var SEASON = {
     Id: 'season1', Name: 'Season 1', Type: 'Season', SeriesId: 'series1',
     IndexNumber: 1, ImageTags: { Primary: 'season1' }
+};
+
+/* Lives in Specials, and the mock's /Episodes handler returns it even when
+   Season 1 is requested: Jellyfin 12.4 does exactly that, and the client has to
+   filter it out rather than show the specials inside Season 1. */
+var SPECIAL = {
+    Id: 'ep0', Name: 'Special Feature', Type: 'Episode', SeriesId: 'series1', SeasonId: 'season0',
+    SeriesName: 'Demo Show', ParentIndexNumber: 0, IndexNumber: 1,
+    RunTimeTicks: 600000000,
+    Overview: 'A mock special that must never appear under Season 1.',
+    ImageTags: { Primary: 'ep0' }, UserData: { PlaybackPositionTicks: 0 }
 };
 
 var EPISODE = {
@@ -97,7 +113,7 @@ var SIMILAR = [
 ];
 
 var ITEMS = {};
-[MOVIE, SERIES, SEASON, EPISODE, EPISODE2].concat(SIMILAR).forEach(function (item) { ITEMS[item.Id] = item; });
+[MOVIE, SERIES, SEASON0, SEASON, EPISODE, EPISODE2, SPECIAL].concat(SIMILAR).forEach(function (item) { ITEMS[item.Id] = item; });
 (MOVIE.People || []).forEach(function (person) { ITEMS[person.Id] = person; });
 
 
@@ -612,10 +628,12 @@ async function handleApi(req, res, url) {
     }
 
     parts = /^\/Shows\/([^/]+)\/Seasons$/.exec(pathname);
-    if (parts) { json(res, 200, { Items: [SEASON], TotalRecordCount: 1 }); return true; }
+    if (parts) { json(res, 200, { Items: [SEASON0, SEASON], TotalRecordCount: 2 }); return true; }
 
+    /* SeasonId is deliberately ignored, the way Jellyfin 12.4 ignored it for a
+       series with specials: the client must filter the list itself. */
     parts = /^\/Shows\/([^/]+)\/Episodes$/.exec(pathname);
-    if (parts) { json(res, 200, { Items: [EPISODE, EPISODE2], TotalRecordCount: 2 }); return true; }
+    if (parts) { json(res, 200, { Items: [EPISODE, EPISODE2, SPECIAL], TotalRecordCount: 3 }); return true; }
 
     if (pathname === '/Shows/NextUp') { json(res, 200, { Items: [EPISODE2], TotalRecordCount: 1 }); return true; }
 

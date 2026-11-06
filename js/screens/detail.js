@@ -350,7 +350,13 @@
                 });
                 bar.appendChild(btn);
             });
-            showSeason(0);
+            /* Start on the first real season, not on the specials that Jellyfin
+               lists first. */
+            var start = 0;
+            for (var s = 0; s < seasons.length; s++) {
+                if ((seasons[s].IndexNumber || 0) > 0) { start = s; break; }
+            }
+            showSeason(start);
         }).catch(function () {
             host.appendChild(UI.empty('Could not load seasons.'));
         });

@@ -710,6 +710,39 @@ async function main() {
         await waitFor("!!document.querySelector('.cinema-hero')", 'back on detail');
         check('BACK stops playback and returns', true);
 
+        /* ---------------------------------------- series: one season at a time */
+
+        /* A Series is a folder on the server, but it opens the detail screen:
+           the season bar fetches episodes by SeasonId, while a folder listing
+           of a season can come back with the specials mixed in. */
+        check('a series opens its detail screen',
+            !(await evaluate("UI.isFolder({ Type: 'Series', IsFolder: true })")));
+
+        await evaluate("App.go('detail', { itemId: 'series1' }); true");
+        await waitFor("document.querySelectorAll('.season-bar .btn').length === 2", 'season bar');
+        var seasonLabels = await evaluate(
+            "Array.prototype.map.call(document.querySelectorAll('.season-bar .btn'), function (b) { return b.textContent; })");
+        check('series detail lists specials and season 1',
+            seasonLabels.join(',') === 'Specials,Season 1', seasonLabels.join(','));
+        check('the first real season is selected, not the specials',
+            (await evaluate("(document.querySelector('.season-bar .btn.on') || {}).textContent")) === 'Season 1');
+
+        /* The mock returns a Specials episode even when Season 1 is asked for,
+           the way Jellyfin 12.4 did for Chernobyl. */
+        await waitFor("document.querySelectorAll('.episodes-host .card').length === 2", 'season 1 episodes');
+        var season1Names = await evaluate(
+            "Array.prototype.map.call(document.querySelectorAll('.episodes-host .card .caption')," +
+            " function (n) { return n.textContent; })");
+        check('a specials episode does not leak into season 1',
+            season1Names.indexOf('Special Feature') === -1, season1Names.join(', '));
+
+        await evaluate("Array.prototype.filter.call(document.querySelectorAll('.season-bar .btn')," +
+            " function (b) { return b.textContent === 'Specials'; })[0].click(); true");
+        await waitFor("document.querySelectorAll('.episodes-host .card').length === 1", 'specials episodes');
+        check('specials keep their own episodes',
+            /Special Feature/.test(await evaluate("document.querySelector('.episodes-host').textContent")),
+            await evaluate("document.querySelector('.episodes-host').textContent"));
+
         /* ------------------------------------------------------- discover */
 
         await evaluate("Store.setPref('watchRegion', 'US'); App.go('discover'); true");

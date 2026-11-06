@@ -4,7 +4,7 @@
     'use strict';
 
     var CLIENT_NAME = 'JellyLean';
-    var CLIENT_VERSION = '1.0.2';
+    var CLIENT_VERSION = '1.0.3';
 
     /* What the browse screens need to draw a card and the Home stage: art for
        every role (backdrop and logo feed the ambient stage) and the text that
@@ -441,7 +441,18 @@
                 Fields: 'Overview,PrimaryImageAspectRatio,ProductionYear',
                 ImageTypeLimit: 1,
                 EnableImageTypes: 'Primary'
-            }).then(function (result) { return (result && result.Items) || []; });
+            }).then(function (result) {
+                var items = (result && result.Items) || [];
+                /* Jellyfin 12.4 sometimes ignores SeasonId and returns the whole
+                   series (Chernobyl: 17 episodes for a 5-episode season), so keep
+                   only the season that was asked for.
+                   shortcut: an item without SeasonId is kept, revisit if a server
+                   omits it. */
+                if (!seasonId) return items;
+                return items.filter(function (ep) {
+                    return !ep.SeasonId || ep.SeasonId === seasonId;
+                });
+            });
         },
 
         nextUp: function (seriesId) {
