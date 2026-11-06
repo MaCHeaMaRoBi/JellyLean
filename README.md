@@ -1,6 +1,6 @@
 # JellyLean
 
-A small, hand-written Jellyfin client for Samsung Tizen TVs. It exists because the
+A small, vibe-coded Jellyfin client for Samsung Tizen TVs. It exists because the
 official `jellyfin-tizen` build is a full jellyfin-web bundle: heavy on a 2017 TV,
 and awkward to keep in sync with a server. This one is ~3.5k lines, no framework, no
 build step, and it talks to the Jellyfin REST and WebSocket APIs directly.
