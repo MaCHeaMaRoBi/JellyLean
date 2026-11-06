@@ -42,9 +42,8 @@ install on any 2015-or-newer Samsung TV with developer mode enabled.
   fetched as WebVTT and drawn by the client, so an embedded `subrip` track does not
   force a full video transcode. Image tracks (PGS/VOBSUB) restart the item on a
   transcode with that track burned into the picture.
-- **Transcode quality setting**: caps the bitrate requested for a transcoded
-  stream at 8, 12 or 20 Mbps (default 20). The server keeps returning 1920x1080
-  at all three; lower it only if playback stutters over Wi-Fi.
+- **Uncapped transcode bitrate, 1080p ceiling**: transcoded streams have no
+  bitrate limit; the resolution is pinned to at most 1920x1080 instead.
 - **Skip Intro / Skip Credits / Skip Recap** from Jellyfin 10.10 Media Segments, with
   a fallback to the older Intro Skipper plugin endpoint. The button appears when
   the segment starts; auto-skip can be enabled in Settings.
@@ -326,14 +325,14 @@ test/live.js          read-only test against a real server
 1. `App.playItem` posts to `/Items/{id}/PlaybackInfo` with a device profile that
    describes what the TV can decode.
 2. The source with `SupportsDirectPlay` wins → `/Videos/{id}/stream?static=true`.
-   Otherwise `DirectStreamUrl`, otherwise `TranscodingUrl` (HLS). Direct play is
-   negotiated at 20 Mbps so a high-bitrate 1080p remux is not re-encoded; a
-   source the server must transcode uses **Settings → Transcode quality**
-   (8, 12 or 20 Mbps; default 20), because Jellyfin picks the target resolution
-   from that number. A 4K source at the wrong cap produces a resolution this
-   panel refuses — audio plays and the picture stays black. With this profile the
-   server returns `1920x1080` High profile level 4.1 at every cap up to 20 Mbps,
-   confirmed by probing the encoded segments with ffprobe, not just the playlist.
+   Otherwise `DirectStreamUrl`, otherwise `TranscodingUrl` (HLS). Every request
+   uses an effectively unlimited `MaxStreamingBitrate`, so nothing is re-encoded
+   for bitrate reasons. Because Jellyfin used to derive the transcode resolution
+   from the bitrate, the resolution is pinned explicitly: the H.264 profile
+   requires Width/Height ≤ 1920x1080 and `Api.limitResolution` forces
+   `maxWidth=1920&maxHeight=1080` on the transcoding URL. A 4K source that
+   escaped this would give a resolution the panel refuses — audio plays and the
+   picture stays black.
 3. `Player.open` uses AVPlay on a TV and a `<video>` element in a browser. This
    depends on `index.html` loading `$WEBAPIS/webapis/webapis.js`: without it
    `window.webapis` is undefined, AVPlay is skipped, and an MKV with AC3 audio
@@ -455,7 +454,7 @@ in order of likelihood:
 1. The server sent a stream the TV cannot decode. A 4K HEVC remux transcoded at
    a high bitrate becomes `2560x1440` H.264, which a 1080p panel refuses while
    still playing audio. Check **Settings → Last playback** for the resolution
-   and check the cap in **Settings → Transcode quality** (8/12/20 Mbps).
+   and confirm the transcoding URL carries `maxWidth=1920&maxHeight=1080`.
 2. The device profile claimed HEVC/10-bit, so the server direct-played a UHD
    remux instead of transcoding it.
 3. AVPlay renders below the webview, so an opaque background (or the fallback

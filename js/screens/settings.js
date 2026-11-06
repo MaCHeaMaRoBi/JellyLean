@@ -108,22 +108,6 @@
                 function (value) { Store.setPref('autoAdvance', value); },
                 'forward'
             ));
-            list.appendChild(choiceRow(
-                'Transcode quality',
-                'Bitrate cap when the server converts a file. 20 Mbps still comes back as 1080p; lower it if playback stutters over Wi-Fi.',
-                [
-                    { value: 4000000, label: 'Data saver · 4 Mbps' },
-                    { value: 8000000, label: 'Balanced · 8 Mbps' },
-                    { value: 12000000, label: 'High · 12 Mbps' },
-                    { value: 20000000, label: 'Maximum · 20 Mbps' }
-                ],
-                Store.pref('transcodeQuality', 20000000),
-                function (value) {
-                    Store.setPref('transcodeQuality', value);
-                    U.toast('Takes effect on the next playback');
-                },
-                'settings'
-            ));
 
             list.appendChild(section('SyncPlay'));
             list.appendChild(toggleRow(

@@ -254,8 +254,7 @@
 
         if (session.playMethod === 'Transcode') {
             infoRow(rows, 'Output', session.outputLabel || 'negotiating\u2026');
-            infoRow(rows, 'Bitrate cap',
-                Math.round(Store.pref('transcodeQuality', 20000000) / 1000000) + ' Mbps');
+            infoRow(rows, 'Bitrate cap', 'None (1920\u00d71080 max)');
         }
 
         if (audio) {

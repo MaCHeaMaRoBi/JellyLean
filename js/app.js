@@ -309,7 +309,6 @@
         return Api.negotiate(item.Id, {
             startTicks: startTicks,
             forceTranscode: forceTranscode,
-            transcodeBitrate: Store.pref('transcodeQuality', 20000000),
             subtitleIndex: opts.subtitleIndex,
             audioIndex: opts.audioIndex,
             mediaSourceId: opts.mediaSourceId
@@ -334,8 +333,7 @@
             return Api.negotiate(item.Id, {
                 startTicks: startTicks,
                 forceTranscode: true,
-                transcodeBitrate: Store.pref('transcodeQuality', 20000000),
-                subtitleIndex: image.Index,
+                    subtitleIndex: image.Index,
                 audioIndex: opts.audioIndex,
                 mediaSourceId: result.source.Id
             }).then(function (burned) {

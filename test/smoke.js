@@ -852,22 +852,9 @@ async function main() {
         check('settings buttons carry icons', topIcons >= 2, String(topIcons));
         check('settings reports the last negotiated stream', /Last playback: /.test(diagnostics), diagnostics);
 
-        var quality = await evaluate("(function () {" +
-            "  var rows = document.querySelectorAll('.list-row');" +
-            "  for (var i = 0; i < rows.length; i++) {" +
-            "    var name = rows[i].querySelector('.list-title');" +
-            "    if (!name || name.textContent !== 'Transcode quality') continue;" +
-            "    var chip = rows[i].querySelector('.pill');" +
-            "    var before = chip.textContent;" +
-            "    rows[i].click();" +
-            "    return { before: before, after: chip.textContent, pref: Store.pref('transcodeQuality', 0) };" +
-            "  }" +
-            "  return null;" +
-            "})()");
-        check('transcode quality setting cycles and persists',
-            !!quality && quality.before !== quality.after && quality.pref === 4000000 &&
-            /Data saver/.test(quality.after),
-            quality ? quality.before + ' -> ' + quality.after + ' (' + quality.pref + ')' : 'row missing');
+        var qualityRow = await evaluate("Array.prototype.some.call(document.querySelectorAll('.list-title')," +
+            " function (n) { return n.textContent === 'Transcode quality'; })");
+        check('no transcode bitrate setting', qualityRow === false);
         await capture('07-settings');
 
         /* ------------------------------------------------------------ 401 */

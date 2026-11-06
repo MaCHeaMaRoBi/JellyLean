@@ -262,7 +262,7 @@ async function main() {
         var capped = await evaluate("(function () {" +
             "  function check(movies, i) {" +
             "    if (i >= movies.length) return 'no transcoding item in sample';" +
-            "    return Api.negotiate(movies[i].Id, { startTicks: 0, transcodeBitrate: 20000000 }).then(function (r) {" +
+            "    return Api.negotiate(movies[i].Id, { startTicks: 0, forceTranscode: true }).then(function (r) {" +
             "      if (!r || !r.source || r.method !== 'Transcode' || !r.url) return check(movies, i + 1);" +
             "      return Api.transcodeOutput(Api.withApiKey(r.url)).then(function (out) {" +
             "        if (!out || !out.resolution) return 'no master playlist';" +
@@ -284,7 +284,7 @@ async function main() {
         if (capped && capped.burned) {
             throw new Error('transcode URL still burns in a subtitle track');
         }
-        ok('transcoded stream capped at 1080p, no burn-in',
+        ok('uncapped-bitrate transcode held to 1080p, no burn-in',
             typeof capped === 'string' ? capped
                 : capped.name + ' ' + capped.res + ' @ ' + capped.bandwidth + ' Mbps fits=' + capped.fits);
 

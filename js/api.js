@@ -193,8 +193,16 @@
        Describes what a 2017 Samsung TV can actually decode, so the server only
        transcodes what it must. `forceTranscode` flips every source to HLS. */
 
-    function deviceProfile(forceTranscode, maxBitrate) {
-        var cap = maxBitrate || 20000000;
+    /* No practical bitrate ceiling. Jellyfin used to pick the transcode
+       resolution from this number, so the resolution is now pinned separately
+       (MAX_WIDTH x MAX_HEIGHT, below) and the bitrate is left effectively
+       unlimited. */
+    var UNCAPPED_BITRATE = 1000000000;
+    var MAX_WIDTH = 1920;
+    var MAX_HEIGHT = 1080;
+
+    function deviceProfile(forceTranscode) {
+        var cap = UNCAPPED_BITRATE;
         var profile = {
             Name: 'JellyLean (Samsung Tizen)',
             MaxStreamingBitrate: cap,
@@ -228,8 +236,8 @@
                     Type: 'Video', Codec: 'h264',
                     Conditions: [
                         { Condition: 'LessThanEqual', Property: 'VideoLevel', Value: '41', IsRequired: false },
-                        { Condition: 'LessThanEqual', Property: 'Width', Value: '1920', IsRequired: false },
-                        { Condition: 'LessThanEqual', Property: 'Height', Value: '1080', IsRequired: false },
+                        { Condition: 'LessThanEqual', Property: 'Width', Value: String(MAX_WIDTH), IsRequired: true },
+                        { Condition: 'LessThanEqual', Property: 'Height', Value: String(MAX_HEIGHT), IsRequired: true },
                         { Condition: 'LessThanEqual', Property: 'VideoBitDepth', Value: '8', IsRequired: false }
                     ]
                 }
@@ -480,11 +488,11 @@
                 StartTimeTicks: opts.startTicks || 0,
                 IsPlayback: true,
                 AutoOpenLiveStream: true,
-                MaxStreamingBitrate: opts.maxBitrate || 20000000,
+                MaxStreamingBitrate: UNCAPPED_BITRATE,
                 EnableDirectPlay: !forceTranscode,
                 EnableDirectStream: !forceTranscode,
                 EnableTranscoding: true,
-                DeviceProfile: deviceProfile(forceTranscode, opts.maxBitrate)
+                DeviceProfile: deviceProfile(forceTranscode)
             };
 
             /* Jellyfin only honours SubtitleStreamIndex when the source is
@@ -503,27 +511,24 @@
             return request('POST', '/Items/' + itemId + '/PlaybackInfo', body, params);
         },
 
-        /* A 2017 TV is 1080p, and Jellyfin picks the transcode target from
-           MaxStreamingBitrate. A transcode is deliberately capped below 4K UHD
-           so the server never targets a resolution this panel refuses (audio
-           plays, picture stays black). 8 Mbps was the old safe default; the
-           setting now lets the cap be raised to 20 Mbps, which this server still
-           emits as 1920x1080 High profile level 4.1 (verified with ffprobe). */
+        /* A 2017 TV is 1080p. The transcode bitrate is uncapped, so the target
+           resolution can no longer be inferred from it: the device profile
+           requires Width/Height <= 1920x1080 and the transcoding URL is pinned
+           to maxWidth=1920&maxHeight=1080 (Api.limitResolution) so the server
+           never targets a resolution this panel refuses (audio plays, picture
+           stays black). */
         negotiate: function (itemId, options) {
             var opts = options || {};
             var forceTranscode = !!opts.forceTranscode;
-            var directCap = opts.directBitrate || 20000000;
-            var transcodeCap = opts.transcodeBitrate || 8000000;
             var subtitleIndex = (opts.subtitleIndex === undefined || opts.subtitleIndex === null)
                 ? -1 : opts.subtitleIndex;
             var audioIndex = (opts.audioIndex === undefined || opts.audioIndex === null)
                 ? -1 : opts.audioIndex;
 
-            function request(bitrate) {
+            function request() {
                 return Api.playbackInfo(itemId, {
                     startTicks: opts.startTicks || 0,
                     forceTranscode: forceTranscode,
-                    maxBitrate: bitrate,
                     mediaSourceId: opts.mediaSourceId,
                     subtitleIndex: subtitleIndex,
                     audioIndex: audioIndex
@@ -554,9 +559,9 @@
                        parameters is what jellyfin-web does when no subtitle is
                        being encoded. When an image track was requested, keep
                        its SubtitleStreamIndex/SubtitleMethod=Encode pair. */
-                    streamUrl = Api.absoluteUrl(subtitleIndex >= 0
+                    streamUrl = Api.absoluteUrl(Api.limitResolution(subtitleIndex >= 0
                         ? source.TranscodingUrl
-                        : Api.stripSubtitleParams(source.TranscodingUrl));
+                        : Api.stripSubtitleParams(source.TranscodingUrl)));
                 } else {
                     method = 'DirectPlay';
                     streamUrl = Api.streamUrl(itemId, source.Id, playSessionId);
@@ -565,26 +570,9 @@
                 return { info: info, source: source, method: method, url: streamUrl, playSessionId: playSessionId };
             }
 
-            return request(forceTranscode ? transcodeCap : directCap).then(function (info) {
+            return request().then(function (info) {
                 var sources = (info && info.MediaSources) || [];
-                var source = Api.pickSource(sources);
-
-                if (!source || forceTranscode || Api.canDirectPlay(source)) {
-                    return build(info, source);
-                }
-
-                /* Both caps are the same, so this answer already was negotiated
-                   at the transcode cap: a second call would only burn another
-                   PlaySessionId for an identical URL. */
-                if (transcodeCap === directCap) {
-                    return build(info, source);
-                }
-
-                return request(transcodeCap).then(function (second) {
-                    var retrySources = (second && second.MediaSources) || [];
-                    if (!retrySources.length) return build(info, source);
-                    return build(second, Api.pickSource(retrySources));
-                });
+                return build(info, Api.pickSource(sources));
             });
         },
 
@@ -764,6 +752,27 @@
                     });
                 });
             }).then(null, function () { return finish(false); });
+        },
+
+        /* Pin a transcoding URL to 1920x1080 at most, whatever the server chose.
+           Replaces any maxWidth/maxHeight already present and drops the
+           width/height pair that would override them. */
+        limitResolution: function (pathOrUrl) {
+            if (!pathOrUrl) return '';
+
+            var split = pathOrUrl.indexOf('?');
+            var base = split === -1 ? pathOrUrl : pathOrUrl.slice(0, split);
+            var parts = split === -1 ? [] : pathOrUrl.slice(split + 1).split('&');
+            var kept = [];
+
+            for (var i = 0; i < parts.length; i++) {
+                if (!parts[i]) continue;
+                if (/^(maxWidth|maxHeight|width|height)=/i.test(parts[i])) continue;
+                kept.push(parts[i]);
+            }
+
+            kept.push('maxWidth=' + MAX_WIDTH, 'maxHeight=' + MAX_HEIGHT);
+            return base + '?' + kept.join('&');
         },
 
         stripSubtitleParams: function (pathOrUrl) {
