@@ -1,227 +1,144 @@
-# JellyLean
+<div align="center">
+  <img src="icon.png" width="112" alt="JellyLean icon">
 
-A small, vibe-coded Jellyfin client for Samsung Tizen TVs. It exists because the
-official `jellyfin-tizen` build is a full jellyfin-web bundle: heavy on a 2017 TV,
-and awkward to keep in sync with a server. This one is ~3.5k lines, no framework, no
-build step, and it talks to the Jellyfin REST and WebSocket APIs directly.
+  # JellyLean
 
-Built for a **UE43M5602 (2017 M5 series, Tizen 3.0, 1080p)**, but it should run on
-any Tizen TV from 2015 onwards.
+  **A light, remote-first Jellyfin client for Samsung Tizen TVs.**
 
-## Screenshots
+  [![Latest release](https://img.shields.io/github/v/release/MaCHeaMaRoBi/JellyLean?style=flat-square&label=release)](../../releases/latest)
+  ![Tizen 2.3+](https://img.shields.io/badge/Tizen-2.3%2B-1428A0?style=flat-square)
+  ![Jellyfin 10.9+](https://img.shields.io/badge/Jellyfin-10.9%2B-00A4DC?style=flat-square)
+  [![MIT license](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
 
-![Home: Continue Watching hero, rows per library](docs/screenshots/01-home.webp)
+  [Features](#features) • [Install](#install) • [Build](#build-from-source) • [Development](#development) • [Troubleshooting](#troubleshooting)
+</div>
 
-| Movies | Details |
-| --- | --- |
-| ![Library grid with real posters](docs/screenshots/02-movies.webp) | ![Movie detail with backdrop, logo and cast](docs/screenshots/03-detail.webp) |
+![JellyLean home screen](docs/screenshots/01-home.webp)
 
-## Download
+JellyLean is a hand-written Jellyfin client for Samsung Tizen TVs. The official
+`jellyfin-tizen` build ships the full jellyfin-web bundle, which is heavy on older
+hardware; JellyLean is plain ES5 with no framework and no build step, and talks to
+Jellyfin's REST and WebSocket APIs directly.
 
-Grab the signed `JellyLean.wgt` from the [latest release](../../releases/latest) and
-sideload it with `scripts/install.sh --ip <tv>` — see
-[Build and install](#build-and-install). Builds are signed for Tizen 3.0+, so they
-install on any 2015-or-newer Samsung TV with developer mode enabled.
+Built and tested on a **UE43M5602** (2017 M5 series, Tizen 3.0, 1080p); it should
+run on any Tizen TV from 2015 onwards.
+
+> [!TIP]
+> Just want it on your TV? Grab the signed `JellyLean.wgt` from the
+> [latest release](../../releases/latest) and follow [Install](#install).
 
 ## Features
 
-- Server address and login are entered on the TV and stored locally; nothing is
-  hardcoded.
-- Password sign-in and Quick Connect.
-- Home screen with a **Continue Watching** hero, **Libraries**, and a latest row
-  per library.
-- Library browsing, item details, seasons and episodes.
-- Playback through Samsung **AVPlay** (hardware decode, HLS) with an HTML5 `<video>`
-  fallback so the app runs in a desktop browser for development.
-- **Automatic transcode fallback**: if a direct-play stream errors or decodes no
-  frames, playback reopens once through the server's HLS transcoder instead of
-  sitting on a black screen.
-- **Per-title subtitle picker**: choose Off or any track from the playback OSD.
-  The choice is remembered per movie and per series (so every episode follows the
-  show), and the picker marks the active track with a check. Text tracks are
-  fetched as WebVTT and drawn by the client, so an embedded `subrip` track does not
-  force a full video transcode. Image tracks (PGS/VOBSUB) restart the item on a
-  transcode with that track burned into the picture.
-- **Uncapped transcode bitrate, 1080p ceiling**: transcoded streams have no
-  bitrate limit; the resolution is pinned to at most 1920x1080 instead.
-- **Skip Intro / Skip Credits / Skip Recap** from Jellyfin 10.10 Media Segments, with
-  a fallback to the older Intro Skipper plugin endpoint. The button appears when
-  the segment starts; auto-skip can be enabled in Settings.
-- **SyncPlay**: create or join a group, clock-offset estimation, group load/stop,
+- **Browse** — Continue Watching hero, a latest row per library, full library
+  grids, details with seasons and episodes, unified search, and Discover (Seerr)
+  through the optional Litefin plugin.
+- **Play** — Samsung AVPlay hardware decoding with an HTML5 fallback, automatic
+  transcode retry when direct play fails, up-next autoplay, resume positions and
+  watched state.
+- **Subtitles and audio** — a per-title subtitle picker (remembered per movie and
+  per series) and an audio-track picker. Text subtitles are fetched as WebVTT and
+  drawn by the client, so they do not force a transcode; image subtitles
+  (PGS/VOBSUB) restart with a burn-in.
+- **Skip Intro / Credits / Recap** — Jellyfin 10.10 Media Segments, with a fallback
+  to the Intro Skipper plugin on 10.8/10.9.
+- **SyncPlay** — create or join a group, clock-offset estimation, shared queue,
   play/pause/seek routing, buffering/ready reports and drift correction.
-- Resume positions, progress reporting and played state.
-- Remote-first UI: four-way spatial navigation, BACK handling, media keys.
-- **On-screen control row** above the progress bar (rewind / play-pause / forward /
-  subtitles / info) reachable with ↑ and ←/→; the play button reflects the current
-  state and the captions button lights while a track is active.
-- **Playback info panel** (info control or the remote's INFO key) showing the
-  negotiation result: direct play vs transcode, engine, container, source video,
-  transcode output and cap, audio and active subtitle.
-- Inline SVG icon set anywhere a glyph helps: top bar, OSD badges and controls,
-  settings rows and action buttons. No icon font or network request.
+- **Remote-first UI** — four-way spatial navigation, an OSD control row, a playback
+  info panel and inline SVG icons. No pointer required.
+- **Opt-in bitrate cap** — uncapped and pinned to 1080p by default; cap it to
+  2–40 Mbps in Settings if the TV or network struggles with high-bitrate remuxes.
+- **Small and static** — no runtime dependencies, no framework, no build step.
 
-## Design
+## Screenshots
 
-The full system lives in [`DESIGN.md`](DESIGN.md) (tokens, type scale, components,
-focus, motion, compatibility rules) and [`PRODUCT.md`](PRODUCT.md). In short: deep-water
-ink surfaces, artwork as the light source, one aqua accent, and one white focus
-language. `node scripts/check-design.js` fails if the stylesheet uses a colour that
-DESIGN.md does not define.
-
-- **10-foot scale.** Nothing below 24 px; sentences 28 px and up; posters 250x375,
-  landscape cards 392x220. Safe area is 96x54 px (5% of 1080p).
-- **Navigation.** A tab bar (Home, libraries, Search, Discover) plus SyncPlay and
-  Settings icons. UP from the first shelf enters the tabs at the current one; DOWN
-  returns to the last focused item. BACK restores the previous screen's focused item.
-- **Home stage.** The backdrop, title and overview follow the focused card; shelves
-  slide under a fixed line so the focused shelf never moves vertically.
-- **One focus language.** White: posters get a ring and scale, buttons/tabs/rows fill
-  white with dark text. Scrolling is a `transform`, never `scrollTop`.
-- **No CSS the TV cannot run.** Flexbox only; no grid, custom properties, `gap`,
-  `inset`, `aspect-ratio`, blur or `backdrop-filter`; motion is `transform`/`opacity`
-  only. Fonts (Figtree, Bricolage Grotesque, OFL) are bundled in `fonts/`.
-- **Accessibility.** Headings per screen, `aria-label` on cards/rows, live regions,
-  and a `prefers-reduced-motion` variant.
+| Movies | Details |
+| :---: | :---: |
+| ![Library grid with posters](docs/screenshots/02-movies.webp) | ![Movie detail with backdrop, logo and cast](docs/screenshots/03-detail.webp) |
 
 ## Requirements
 
-**TV**
+| Component | Requirement |
+| --- | --- |
+| **TV** | Tizen 2.3 or newer (targets the `tv` profile, Tizen 3.0), developer mode enabled, and a network path to your Jellyfin server. |
+| **Server** | Jellyfin 10.9 or newer, verified against 12.4.0. SyncPlay needs 10.8+; Media Segments need 10.10+. For Skip Intro on 10.8/10.9, install the [Intro Skipper](https://github.com/jellyfin/jellyfin-plugin-intros) plugin. |
+| **Build machine** | Tizen Studio CLI (`web-cli_Tizen_Studio_6.1`), `zip`, and Node.js 18+ for the dev server and tests. |
 
-- Tizen 2.3 or newer (the app is targeted at the `tv` profile, Tizen 3.0).
-- Developer mode enabled, see below.
-- Network access to your Jellyfin server.
+A direct network path is required: `http://192.168.x.x:8096`, or HTTPS with a
+certificate the TV trusts. Self-signed certificates are usually rejected.
 
-**Server**
-
-- Jellyfin 10.9 or newer, **verified against 12.4.0**. SyncPlay needs 10.8+;
-  Media Segments (the clean Skip Intro path) need 10.10+. The client detects
-  nothing by version — it sends the request formats both generations understand,
-  see [Server compatibility](#server-compatibility).
-- For Skip Intro on 10.8/10.9, install the
-  [Intro Skipper](https://github.com/jellyfin/jellyfin-plugin-intros) plugin; the
-  client falls back to `/Episode/{id}/IntroSkipperSegments`.
-- A direct network path from the TV: `http://192.168.x.x:8096`, or HTTPS with a
-  certificate the TV trusts. Self-signed certificates are usually rejected.
-
-**Build machine**
-
-- Tizen Studio CLI for a signed, installable package (`web-cli_Tizen_Studio_6.1`).
-  No keyring daemon is required; `scripts/setup-signing.sh` handles that.
-- `zip` for the unsigned development package.
-- `node` (18+) if you want the mock server and browser test.
-- `ffmpeg` (optional) so the mock server can generate a sample video.
-
-## Build and install
+## Install
 
 ### 1. Enable developer mode on the TV
 
 1. Open **Apps**, highlight **App Store** (or any app tile), and press `12345` on
    the remote.
-2. Turn **Developer mode** on.
-3. Enter the **IP address of the computer** that will install the app.
-4. Reboot the TV.
+2. Turn **Developer mode** on and enter the IP address of the computer that will
+   install the app.
+3. Reboot the TV.
 
 The TV now listens for `sdb` on TCP 26101.
 
-### 2. Signing
+### 2. Install the widget
 
-A retail TV only installs widgets signed with a trusted certificate.
-
-**Headless (what this project uses).** Put an author and a distributor PKCS#12 in
-`~/.tizen-certs` (`author.p12`, `distributor.p12`, optional `ca/`), then:
+Download `JellyLean.wgt` from the [latest release](../../releases/latest), then:
 
 ```bash
-scripts/setup-signing.sh          # creates the signing profile
-```
-
-`CERT_DIR=... CERT_PASSWORD=... PROFILE=... scripts/setup-signing.sh` overrides the
-paths. Budget signing with the Tizen-issued pair that Apps2Samsung ships works on
-retail TVs in developer mode:
-
-```bash
-CERT_DIR=~/.local/share/apps2samsung-bin/Assets/Certificate/Jellyfin \
-  scripts/setup-signing.sh
-```
-
-Tizen CLI 6.x reads certificate passwords over the D-Bus **Secret Service**. On a
-machine with no keyring daemon (headless, minimal KDE, container, WSL) every
-build dies with `CertificationException: Invaild password`, because the lookup
-cannot reach a provider at all. `setup-signing.sh` therefore installs
-`scripts/tizen-secret-shim.sh` as the SDK's `secret-tool`, which stores the same
-lookup/store contract in `~/.tizen-certs/passwords` (0600). The original binary is
-kept as `secret-tool.real`. To undo:
-
-```bash
-cp -a ~/tizen-studio/tools/certificate-encryptor/secret-tool.real \
-      ~/tizen-studio/tools/certificate-encryptor/secret-tool
-```
-
-**GUI alternative.** Tizen Studio → **Tools → Certificate Manager → Samsung →
-Author certificate**, sign in with a Samsung account, create a profile, note its
-name, and build with `TIZEN_PROFILE=<name>`.
-
-> The unsigned `.wgt` produced without a profile is fine for the browser and for
-> inspecting the package, but a TV rejects it with `Invalid certificate chain`.
-> The widely used distributor certificate expires in 2022; TVs in developer mode
-> accept it, but if yours does not, sign with a Samsung-issued one.
-
-### 3. Build
-
-```bash
-# Signed, installable on the TV (uses the active profile)
-scripts/build.sh
-
-# Pick a profile explicitly
-TIZEN_PROFILE=MyTVProfile scripts/build.sh
-
-# Unsigned, for inspection / hosting only
-scripts/build.sh --unsigned
-```
-
-The result is `dist/JellyLean.wgt`, plus `dist/JellyLean.zip` for unsigned
-builds. The Tizen CLI is found in `PATH` or in `~/tizen-studio` automatically, and
-the script reports whether the widget actually contains signatures. Without the
-CLI it still packages the app with `zip`, so the widget structure can be checked
-anywhere.
-
-### 4. Install
-
-```bash
-# Find TVs on the local network (TCP 26101)
-scripts/install.sh --scan
-
-# Connect and install
-scripts/install.sh --ip 192.168.1.50
-
-# ...and launch it
+scripts/install.sh --scan                 # find TVs on the local network
+scripts/install.sh --ip 192.168.1.50      # install
 scripts/install.sh --ip 192.168.1.50 --run
 ```
 
-The script wraps `sdb connect`, `tizen install-permit` (when supported) and
-`tizen install`. If the TV asks whether to allow the connection, accept it.
-
-Manual equivalent:
+Or install manually:
 
 ```bash
 sdb connect 192.168.1.50:26101
-tizen install -n dist/JellyLean.wgt -s 192.168.1.50:26101
+tizen install -n JellyLean.wgt -s 192.168.1.50:26101
 tizen run -p jflean0001.JellyfinLean -s 192.168.1.50:26101
 ```
 
-The Tizen ids (`jflean0001.JellyfinLean`, package `jflean0001`) predate the
-JellyLean name and are kept so an existing install updates in place instead of
-appearing as a second app on the TV.
+Apps2Samsung users can install JellyLean from the community catalog.
 
-To remove the app:
+> [!NOTE]
+> Releases are signed and install on retail TVs in developer mode. They use the
+> Apps2Samsung signing pair; if your TV rejects it, rebuild with a Samsung-issued
+> certificate. The Tizen ids (`jflean0001.JellyLean`, package `jflean0001`) predate
+> the JellyLean name and are kept so an update replaces an existing install instead
+> of adding a second app.
+
+## Build from source
+
+The Tizen CLI is found on `PATH` or in `~/tizen-studio` automatically.
+
+A retail TV only installs widgets signed with a trusted certificate. Put
+`author.p12` and `distributor.p12` in `~/.tizen-certs`, then create the signing
+profile once:
 
 ```bash
-tizen uninstall -p jflean0001
+scripts/setup-signing.sh
+# override the certificate paths, password or profile:
+CERT_DIR=... CERT_PASSWORD=... PROFILE=... scripts/setup-signing.sh
 ```
+
+Then build:
+
+```bash
+scripts/build.sh                        # signed widget, active profile
+TIZEN_PROFILE=MyTVProfile scripts/build.sh
+scripts/build.sh --unsigned             # inspection / browser only
+```
+
+The result is `dist/JellyLean.wgt`. The script reports whether the widget actually
+contains both signatures.
+
+> [!NOTE]
+> On headless machines Tizen CLI 6.x fails with `CertificationException: Invaild
+> password` because it cannot reach a Secret Service provider. `setup-signing.sh`
+> installs a small file-backed `secret-tool` shim for that case.
 
 ## First run
 
-1. Start the app. The setup screen asks for the server address, e.g.
-   `192.168.1.20:8096` or `https://jellyfin.example.com`.
+1. Start the app and enter the server address, e.g. `192.168.1.20:8096` or
+   `https://jellyfin.example.com`.
 2. Sign in with a username and password, or use **Quick Connect**.
 3. The server URL, access token and user id are stored in the TV's `localStorage`.
    **Settings → Sign out** removes the token.
@@ -236,51 +153,38 @@ sessions and SyncPlay participants apart.
 The dev server serves the app and a small mock Jellyfin API from one origin:
 
 ```bash
-node scripts/dev-server.js
-# open http://localhost:8096
+node scripts/dev-server.js          # http://localhost:8096
+PORT=8097 node scripts/dev-server.js
 ```
 
-On the setup screen enter `localhost:8096` and any username/password. The mock
-provides two libraries, a movie, a series with one season and episode, working
-images, intro segments (0:02–0:06), playback info, a default/forced subtitle served
-as WebVTT and a generated 20-second test video. It also accepts SyncPlay group creation/leave and echoes a queue over the
-WebSocket, so the group UI can be exercised without a real server.
+Enter `localhost:8096` and any username/password. The mock provides two libraries,
+a movie, a series with a season and episode, working images, intro segments,
+WebVTT subtitles, a generated test video, and a SyncPlay group stub.
 
-Use `PORT=8097 node scripts/dev-server.js` to change the port. To reset the
-client, run `localStorage.clear()` in DevTools and reload.
+`NO_MOCK=1 node scripts/dev-server.js` serves only the static app, which is how to
+drive the real client against a real Jellyfin by hand. Reset the client with
+`localStorage.clear()`.
 
-### Browser smoke test
+### Tests
 
 ```bash
-node test/smoke.js
+node test/smoke.js        # headless Chromium UI test; fails on console errors
+node test/live.js         # read-only checks against a real server
+node test/syncplay.js     # SyncPlay state machine and drift correction
+node test/osd.js          # OSD fade (skipped when jsdom is not installed)
+node scripts/check-design.js
 ```
 
-The test starts the dev server and headless Chromium, drives the real UI over the
-Chrome DevTools Protocol, and fails on any console error. It covers setup and
-remote-key navigation (including leaving a text field without the TV keyboard),
-login, home, SyncPlay create/leave, library/detail navigation, playback, the
-subtitle overlay and seek sync, Skip Intro and the SyncPlay `load` handoff. Use
-`SHOTS=1 node test/smoke.js` to also write screenshots to `.dev/screenshots`.
-Set `CHROME=/path/to/chromium` if the browser is not in a standard location.
-
-### Live server test
-
-The mock enforces the same rules as a current server, but the real check runs the
-actual client against your Jellyfin:
+The live test signs in through the real setup screen and checks rows, images,
+segments, negotiation, subtitles and the SyncPlay socket without changing watch
+state:
 
 ```bash
 JF_URL=http://192.168.1.20:8096 JF_USER=me JF_PASS=secret node test/live.js
 ```
 
-It starts the dev server with `NO_MOCK=1` (static files only), signs in through the
-real setup screen, and asserts that home rows render, libraries are listed, poster
-images decode, media segments return an intro/outro, playback negotiation yields a
-stream URL that authorizes, a subtitled movie's default track comes back as
-WebVTT with parsed cues, and the SyncPlay screen reaches a WebSocket. Read-only:
-it never starts playback and never changes watch state.
-
-`NO_MOCK=1 node scripts/dev-server.js` serves only the app, which is how you can
-drive the real client against a real server by hand.
+`SHOTS=1 node test/smoke.js` writes screenshots to `.dev/screenshots`;
+`CHROME=/path/to/chromium` selects a browser.
 
 ## Remote controls
 
@@ -296,216 +200,102 @@ drive the real client against a real server by hand.
 | Stop | — | Stop and go back |
 | FF / Rewind | — | Seek ±30s |
 
-SyncPlay changes the meaning of pause and seek: the command is sent to the server
-and applied when it comes back, so everybody stays together.
+SyncPlay changes the meaning of pause and seek: the command goes to the server and
+is applied when it comes back, so everyone stays together.
 
 ## How it works
 
 ```
-config.xml            Tizen widget manifest (package jflean0001)
-index.html            static shell: #app for screens, #stage + #osd for video
-css/app.css           TV stylesheet; flexbox only (no grid/gap/custom properties)
-js/util.js            DOM, formatting, emitter, spatial focus navigation
-js/store.js           localStorage config, device id, auth, preferences
-js/api.js             Jellyfin REST client, device profile, WebSocket
-js/player.js          AVPlay + HTML5 playback engine, stall watchdog
-js/subtitles.js       WebVTT parsing and the cue overlay
-js/skipintro.js       Media Segments / Intro Skipper parsing
-js/syncplay.js        SyncPlay group, queue, time sync, commands, drift
-js/ui.js              cards, rows, top bar, screen shell
-js/app.js             boot, router, remote keys, playback pipeline
-js/screens/*.js       setup, home, library, detail, player, settings, syncplay
-scripts/              build, install, signing setup, dev server
-test/smoke.js         zero-dependency browser test
-test/live.js          read-only test against a real server
+config.xml      Tizen widget manifest (package jflean0001)
+index.html      static shell: #app for screens, #stage + #osd for video
+css/app.css     TV stylesheet — flexbox only, no grid/gap/custom properties
+js/api.js       Jellyfin REST client, device profile, WebSocket
+js/player.js    AVPlay + HTML5 playback engine, stall watchdog
+js/subtitles.js WebVTT parsing and the cue overlay
+js/syncplay.js  SyncPlay group, queue, time sync, commands, drift
+js/screens/     setup, home, library, detail, player, search, discover, syncplay, settings
+scripts/        build, install, signing setup, dev server
+test/           smoke, live, syncplay, osd
 ```
 
-### Playback pipeline
+**Playback.** `/Items/{id}/PlaybackInfo` negotiates against a device profile that
+claims H.264 up to 1080p and AAC/MP3/AC3/E-AC3. HEVC is deliberately not claimed:
+a UHD remux would direct-play to a black picture on this panel, so the server
+transcodes it instead. Transcoded streams are uncapped but pinned to 1920x1080
+through `maxWidth`/`maxHeight`, because Jellyfin otherwise derives the resolution
+from the bitrate. A direct stream that errors, or reports no frames for 12 seconds,
+is retried once through HLS.
 
-1. `App.playItem` posts to `/Items/{id}/PlaybackInfo` with a device profile that
-   describes what the TV can decode.
-2. The source with `SupportsDirectPlay` wins → `/Videos/{id}/stream?static=true`.
-   Otherwise `DirectStreamUrl`, otherwise `TranscodingUrl` (HLS). Every request
-   uses an effectively unlimited `MaxStreamingBitrate`, so nothing is re-encoded
-   for bitrate reasons. Because Jellyfin used to derive the transcode resolution
-   from the bitrate, the resolution is pinned explicitly: the H.264 profile
-   requires Width/Height ≤ 1920x1080 and `Api.limitResolution` forces
-   `maxWidth=1920&maxHeight=1080` on the transcoding URL. A 4K source that
-   escaped this would give a resolution the panel refuses — audio plays and the
-   picture stays black.
-3. `Player.open` uses AVPlay on a TV and a `<video>` element in a browser. This
-   depends on `index.html` loading `$WEBAPIS/webapis/webapis.js`: without it
-   `window.webapis` is undefined, AVPlay is skipped, and an MKV with AC3 audio
-   renders as a black screen because `<video>` cannot decode it.
-   AVPlay also draws on a **native plane underneath the webview**, so while it
-   owns the screen `showStage` adds `playing` to `<html>` (clear `html` and
-   `body` backgrounds — a background on `html` propagates to the whole canvas)
-   and hides `#html5Video`, otherwise its opaque rectangle covers the picture
-   and only audio and DOM subtitles come through.
-4. The device profile only claims what a 2017 Samsung decodes: H.264/MPEG-4
-   video, AAC/MP3/AC3/E-AC3 audio, with H.264 capped at level 4.1, 1080p and
-   8-bit. HEVC is deliberately **not** claimed: a UHD remux direct-played here
-   gives audio with a black picture, and a 1080p panel gains nothing from it, so
-   the server transcodes it to H.264 instead. Claiming more makes the server hand
-   over a stream the TV then fails to show.
-5. A direct-play stream that errors, or reports no playback time for 12 seconds,
-   is reopened once through the HLS transcoder. A second failure is reported on
-   screen rather than leaving a black picture.
-6. The **subtitle picker** resolves the saved choice for the movie or series,
-   falling back to Jellyfin's default/forced track on a first watch. Text tracks
-   are fetched from
-   `/Videos/{id}/{mediaSourceId}/Subtitles/{index}/Stream.vtt` and drawn over the
-   video, for every play method. This matters because Jellyfin otherwise treats
-   an embedded `subrip` track as something the client cannot show and burns it
-   in, turning every direct-play item with subtitles into a transcode. For the
-   same reason `SubtitleStreamIndex`/`SubtitleMethod` are stripped from transcode
-   URLs (`Api.stripSubtitleParams`, as jellyfin-web does when it is not encoding
-   a subtitle) unless the viewer picked an image track. Image tracks cannot be
-   drawn as text, so the picker reopens the item with that track burned in; the
-   burn-in request names `MediaSourceId` and `SubtitleStreamIndex`, because the
-   server ignores the index without the source id.
-7. Progress is reported to `/Sessions/Playing`, `/Sessions/Playing/Progress`
-   every 10s, and `/Sessions/Playing/Stopped` on exit. Played state is set when
-   an item finishes.
+**Subtitles.** Text tracks are fetched as WebVTT and drawn over the video, so an
+embedded `subrip` track does not force a transcode. Subtitle parameters are
+stripped from transcode URLs unless the viewer picked an image track; PGS/VOBSUB
+tracks are burned in by the server.
 
-### SyncPlay
+**SyncPlay.** `/GetUtcTime` estimates the clock offset NTP-style and the WebSocket
+carries `SyncPlayCommand` and `SyncPlayGroupUpdate` messages. Commands are
+scheduled by server timestamp with drift correction while playing. Starting an
+item in a group sends `SetNewQueue` so every participant follows the same queue.
 
-The client follows the protocol used by jellyfin-web:
-
-- `GET /GetUtcTime` estimates the server clock offset NTP-style; `/SyncPlay/Ping`
-  reports the measured delay.
-- The WebSocket at `ws(s)://host/socket?api_key=…&ApiKey=…&deviceId=…` carries
-  `SyncPlayCommand` and `SyncPlayGroupUpdate` messages; `ForceKeepAlive` is
-  answered with `KeepAlive`. Both parameter spellings are sent because 12.x
-  rejects `api_key` with 403 while older servers only know that spelling.
-- Commands carry a server timestamp, converted to local time and scheduled. Seek
-  drift over 400ms causes a resync; 60–400ms is corrected with a temporary speed
-  adjustment.
-- Starting an item while in a group sends `SetNewQueue`, so every participant
-  follows the same queue. The initiator ignores its own echoed queue event.
-
-### Skip Intro
-
-`GET /MediaSegments/{itemId}?includeSegmentTypes=Intro&includeSegmentTypes=Outro&…`
-is parsed into ordered segments. The types are sent as repeated parameters, not a
-comma-joined string: 12.x validates each value against the enum and answers 400
-for `Intro,Outro`, and the client then retries without the filter. The client shows the button slightly before the
-segment and hides it one second before the end. Auto-skip is disabled while in a
-SyncPlay group (a local skip would desynchronise everybody); skipping there is a
-group seek.
-
-### Server compatibility
-
-The client targets both the 10.x API and 12.x, without branching on the reported
-version. Three differences matter, all handled in `js/api.js`:
-
-| Area | 10.x | 12.x | What the client sends |
-| --- | --- | --- | --- |
-| Auth header | `X-Emby-Authorization` + `X-Emby-Token` | only `Authorization: MediaBrowser …, Token="…"` | the `Authorization` form plus both legacy headers |
-| Array queries | comma-joined accepted | each value validated → 400 | repeated keys (`?x=A&x=B`) |
-| WebSocket | `?api_key=` | `?ApiKey=` (`api_key` → 403) | both |
-
-Images and video streams also accept `api_key=<token>` in the query string, which
-is how the TV loads posters and media without custom headers.
+**Compatibility.** One code path serves Jellyfin 10.x and 12.x: both auth header
+forms, repeated query keys instead of comma-joined lists, and both `api_key` and
+`ApiKey` WebSocket spellings.
 
 ## Limitations
 
-- No audio-track picker yet. The server's default audio track is used.
-- Image subtitles (PGS/VOBSUB) are supported through a server burn-in, which
-  requires a transcode and briefly restarts playback at the current position.
-- No search, playlists, collections, or music-specific UI.
-- No Live TV / DVR.
-- No automatic next-episode autoplay (the server's SyncPlay queue does advance).
-- AVPlay handles what the TV can decode. HEVC and DTS are never claimed, so a
-  4K HEVC remux always transcodes; the client also retries a failed direct-play
-  stream through the transcoder, and **Settings → Force transcoding** skips the
-  direct attempt entirely.
+- No Live TV/DVR, playlists, or dedicated music UI.
+- Image subtitles restart playback briefly while the server burns them in.
+- HEVC and DTS are never claimed, so a 4K HEVC remux always transcodes (by design).
 - HTTPS requires a certificate the TV trusts; a self-signed certificate will fail.
-- The token is stored unencrypted in the TV's web storage, like other Tizen web
-  apps. Sign out before handing the TV over.
+- The token is stored unencrypted in the TV's web storage — sign out before
+  handing the TV on.
+- SyncPlay needs reasonably accurate clocks; the client measures the offset but
+  cannot fix a server whose clock jumps.
 
 ## Troubleshooting
 
-**`tizen package` fails with `CertificationException: Invaild password`** — the CLI
-cannot reach a Secret Service to read the certificate password. Run
-`scripts/setup-signing.sh`, which installs a file-backed password shim, then rebuild.
+**`CertificationException: Invaild password` while building** — the Tizen CLI
+cannot read the certificate password. Run `scripts/setup-signing.sh`, then rebuild.
 
-**Every API call returns 401** — a proxy or an older client build is sending only
-`X-Emby-Token`. 12.x requires `Authorization: MediaBrowser Client="…", Token="…"`.
-The current `js/api.js` sends both; rebuild the widget after pulling.
+**`Invalid certificate chain` on install** — the widget is unsigned or signed with
+the wrong profile. Rebuild with a Samsung author certificate and
+`TIZEN_PROFILE=<profile>`.
 
-**"Invalid certificate chain" on install** — the widget is unsigned or signed with
-the wrong profile. Rebuild with `TIZEN_PROFILE=<profile>` using a Samsung author
-certificate, then reinstall.
-
-**`scripts/install.sh --scan` finds nothing** — developer mode is off, the host IP
-was not entered on the TV, or the TV is on another subnet/VLAN. Reboot the TV after
+**`scripts/install.sh --scan` finds no TV** — developer mode is off, the computer's
+IP was not entered on the TV, or they are on different subnets. Reboot the TV after
 changing developer mode.
 
-**Black screen or no audio** — playback now retries through the transcoder on its
-own; if it still fails, the reason is shown as a toast. Enable **Settings → Force
-transcoding** to skip direct play entirely. If every item is black, check that the
-built `index.html` contains the `$WEBAPIS/webapis/webapis.js` include, otherwise
-the TV never uses AVPlay.
+**Audio but no picture** — check **Settings → Last playback** and confirm the
+transcode URL carries `maxWidth=1920&maxHeight=1080`; enable **Settings → Force
+transcoding**; and make sure the built `index.html` still loads
+`$WEBAPIS/webapis/webapis.js`, otherwise AVPlay is skipped.
 
-**You hear audio and see subtitles, but the picture is black** — three causes,
-in order of likelihood:
+**Skip Intro never appears** — needs Jellyfin 10.10+ Media Segments, or the Intro
+Skipper plugin on 10.8/10.9, and analysed episodes.
 
-1. The server sent a stream the TV cannot decode. A 4K HEVC remux transcoded at
-   a high bitrate becomes `2560x1440` H.264, which a 1080p panel refuses while
-   still playing audio. Check **Settings → Last playback** for the resolution
-   and confirm the transcoding URL carries `maxWidth=1920&maxHeight=1080`.
-2. The device profile claimed HEVC/10-bit, so the server direct-played a UHD
-   remux instead of transcoding it.
-3. AVPlay renders below the webview, so an opaque background (or the fallback
-   `<video>` element) hides it. The player handles this via `html.playing`; if
-   the change is reverted, check that no full-screen element keeps a background
-   colour during playback.
+**SyncPlay drifts** — check that `/GetUtcTime` is reachable (some reverse proxies
+block it) and that the server clock is stable.
 
-**Subtitles take a few seconds to appear the first time** — the server extracts an
-embedded track before it can serve the WebVTT file; later requests are cached.
+**Every API call returns 401** — rebuild after pulling; Jellyfin 12.x requires the
+`Authorization: MediaBrowser …, Token="…"` header.
 
-**Skip Intro never appears** — check that the server is 10.10+ (Media Segments) or
-that the Intro Skipper plugin has analysed the episode. Movies also work when the
-server provides segments for them.
+## Disclaimer
 
-**SyncPlay drifts** — the TV and server clocks must be roughly right; the client
-measures the offset but cannot fix a server whose clock jumps. Check that
-`/GetUtcTime` is reachable (some reverse proxies block it).
+JellyLean is an independent, unofficial project. It is not affiliated with,
+endorsed by, or sponsored by the Jellyfin project, Samsung Electronics, the
+Seerr/Jellyseerr/Overseerr projects, or TMDB.
 
-**The app is not in the TV's app list** — reboot the TV once after installing, or
-launch it with `tizen run -p jflean0001`.
+- **Jellyfin** is free software; this client uses its public REST and WebSocket APIs
+  and contains none of its code.
+- **Samsung Tizen / AVPlay** is provided by the TV firmware at runtime and is not
+  redistributed here.
+- **Litefin plugin** ([MoazSalem/litefin-plugin](https://github.com/MoazSalem/litefin-plugin))
+  powers the optional Discover tab; it is a separate project and is not bundled.
+- **TMDB / JustWatch** provide Discover artwork and availability data. This product
+  uses the TMDB API but is not endorsed or certified by TMDB.
+- **Fonts** (Figtree, Bricolage Grotesque) are under the SIL Open Font License 1.1;
+  their license texts are in [`fonts/`](fonts/).
 
-## License
+Artwork shown in the app belongs to its rights holders and comes from your own
+server; none is shipped in this repository.
 
-MIT — see [LICENSE](LICENSE). Bundled fonts (Figtree, Bricolage Grotesque) are
-licensed under the SIL Open Font License 1.1; their license texts are in
-[`fonts/`](fonts/).
-
-## Disclaimer and third-party notices
-
-JellyLean is an independent, unofficial project. It is **not affiliated with,
-endorsed by, or sponsored by** the Jellyfin project, Samsung Electronics, the
-Seerr / Jellyseerr / Overseerr projects, or TMDB. Jellyfin, Samsung, Tizen,
-AVPlay, Seerr and TMDB are trademarks or property of their respective owners and
-are used here only to describe compatibility.
-
-- **Jellyfin** is free software; this client talks to its public REST and
-  WebSocket APIs and contains none of its code.
-- **Samsung Tizen / AVPlay** (`$WEBAPIS/webapis/webapis.js`) is provided by the TV
-  firmware at runtime and is not redistributed here.
-- **Litefin plugin** ([MoazSalem/litefin-plugin](https://github.com/MoazSalem/litefin-plugin)):
-  the optional Discover tab calls this server-side plugin's `/Litefin/Seerr/*`
-  routes. It is a separate project with its own license and is not bundled.
-- **TMDB / JustWatch**: Discover artwork and "Where to Watch" data are served
-  from TMDB's image CDN (`image.tmdb.org`) and come from TMDB and JustWatch.
-  This product uses the TMDB API but is not endorsed or certified by TMDB.
-- **Fonts**: Figtree and Bricolage Grotesque, SIL Open Font License 1.1.
-
-Movie and show artwork seen in a running app belongs to its rights holders and
-comes from your own server; none is shipped in this repository.
-
-## Security
-
-See [SECURITY.md](SECURITY.md) for how to report a vulnerability and for the
-known limits of the app's security model.
+MIT licensed — see [LICENSE](LICENSE). Security policy: [SECURITY.md](SECURITY.md).
