@@ -58,15 +58,20 @@ global.Api = {
     }
 };
 
-/* AVPlay-like player: seekTo fires 'seeked' at once and a buffering cycle. */
+/* AVPlay-like player: seekTo fires 'seeked' at once and a buffering cycle.
+   While `sim.on`, getPosition follows a real clock plus controllable error. */
 var pos = 10000, paused = false;
+var sim = { on: false, base: 0, startedAt: 0, extra: 0, noise: 0, seeks: 0, speeds: 0 };
+function simTrue() { return sim.base + (Date.now() - sim.startedAt); }
 global.Player = {
-    getPosition: function () { return pos; },
+    mode: 'avplay',
+    getPosition: function () { return sim.on ? simTrue() + sim.extra + sim.noise : pos; },
     isPaused: function () { return paused; },
     pause: function () { paused = true; },
     resume: function () { paused = false; },
-    setSpeed: function () {},
+    setSpeed: function () { sim.speeds++; },
     seekTo: function (ms) {
+        if (sim.on) { sim.seeks++; sim.extra = ms - simTrue(); }
         pos = ms;
         SyncPlay.onSeeked();
         SyncPlay.onBuffering(true);
@@ -123,7 +128,41 @@ function wait(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
     var stallReported = requests.buffering - b0 === 1;
     console.log('Genuine buffering reported: ' + stallReported);
 
-    var ok = loopFree && seekAcked && stallReported;
+    /* Drift correction. A TV in sync whose position readings are noisy
+       (+-450 ms, as sampled every 500 ms) must not be seeked or re-speeded:
+       each seek rebuffers and each speed change glitches, i.e. stutters. */
+    async function startGroupPlayback() {
+        server.state = 'Playing'; server.position = 40000;
+        socket.onMessage({ MessageType: 'SyncPlayGroupUpdate', Data: { Type: 'StateUpdate', Data: { State: 'Playing', Reason: 'Unpause' } } });
+        sim.on = true; sim.base = 40000; sim.startedAt = Date.now(); sim.extra = 0; sim.noise = 0;
+        command('Unpause', 40000);
+        await wait(1700); /* handled, and drift correction armed */
+        sim.seeks = 0; sim.speeds = 0;
+    }
+    async function ticks(n, noiseAmp) {
+        for (var i = 0; i < n; i++) {
+            sim.noise = Math.round(noiseAmp * Math.sin(i * 2.3 + 1));
+            SyncPlay.syncTick(Player.getPosition());
+            await wait(520);
+        }
+        sim.noise = 0;
+    }
+
+    await startGroupPlayback();
+    await ticks(10, 450);
+    var noiseSeeks = sim.seeks, noiseSpeeds = sim.speeds;
+    var steady = noiseSeeks === 0 && noiseSpeeds === 0;
+    console.log('In-sync TV, noisy readings: seeks=' + noiseSeeks + ' speed changes=' + noiseSpeeds + (steady ? '' : '  <- stutter'));
+
+    /* A genuine desync still gets corrected, once, without ping-pong. */
+    await startGroupPlayback();
+    sim.extra = -2500; /* TV is 2.5 s behind the group */
+    await ticks(12, 0);
+    var corrected = sim.seeks === 1 && Math.abs(Player.getPosition() - simTrue()) < 400;
+    console.log('Real 2.5 s desync: seeks=' + sim.seeks + ' (want 1), residual ' +
+        Math.round(simTrue() - Player.getPosition()) + ' ms');
+
+    var ok = loopFree && seekAcked && stallReported && steady && corrected;
     console.log(ok ? 'PASS' : 'FAIL');
     process.exit(ok ? 0 : 1);
 })();

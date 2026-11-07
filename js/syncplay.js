@@ -37,8 +37,21 @@
            reach the server: it would pause the whole group and answer with a
            fresh Pause/Unpause that makes this client seek again. */
         quietUntil: 0,
-        bufferingReported: false
+        bufferingReported: false,
+        /* Drift correction. The TV's position is only sampled every 500 ms and
+           is noisy, so single samples are never acted on. */
+        driftSamples: [],
+        lastHardSeek: 0,
+        speedChanged: false,
+        localBuffering: false
     };
+
+    /* Hard seeks cost a rebuffer on Tizen (especially HLS transcodes), so they
+       are reserved for real desyncs. HTML5 seeks are cheap and can be tighter. */
+    var DRIFT_SAMPLES = 5;
+    var HARD_SEEK_AVPLAY_MS = 1500;
+    var HARD_SEEK_HTML5_MS = 400;
+    var HARD_SEEK_COOLDOWN_MS = 8000;
 
     var socket = null;
     var pingTimer = null;
@@ -58,6 +71,19 @@
 
     function localToRemote(date) { return new Date(date.getTime() + state.timeOffset); }
     function remoteToLocal(date) { return new Date(date.getTime() - state.timeOffset); }
+
+    function median(values) {
+        var sorted = values.slice(0).sort(function (a, b) { return a - b; });
+        return sorted[Math.floor(sorted.length / 2)];
+    }
+
+    function resetDrift() { state.driftSamples = []; }
+
+    function restoreSpeed() {
+        if (!state.speedChanged) return;
+        state.speedChanged = false;
+        Player.setSpeed(1);
+    }
 
     function quiet(ms) { state.quietUntil = Date.now() + ms; }
     function isQuiet() { return Date.now() < state.quietUntil; }
@@ -314,6 +340,8 @@
         }
 
         state.lastCommand = command;
+        resetDrift();
+        restoreSpeed();
 
         if (!state.playbackActive) {
             SyncPlay.emit('command-no-player', command);
@@ -490,6 +518,10 @@
         state.groupState = null;
         state.bufferingReported = false;
         state.quietUntil = 0;
+        state.localBuffering = false;
+        state.lastHardSeek = 0;
+        resetDrift();
+        restoreSpeed();
         clearCommandTimer();
         stopTimeSync();
 
@@ -579,6 +611,9 @@
     };
 
     SyncPlay.onBuffering = function (isBuffering) {
+        state.localBuffering = !!isBuffering;
+        /* A stall freezes the position, so samples taken around it are bogus. */
+        resetDrift();
         reportBuffering(isBuffering);
     };
 
@@ -587,12 +622,13 @@
        own corrective seeks, so reporting it would only provoke the server. */
     SyncPlay.onSeeked = function () {};
 
-    /* Drift correction, called from the player's timeupdate. */
+    /* Drift correction, called from the player's timeupdate (every 500 ms). */
     SyncPlay.syncTick = function (positionMs) {
         if (!state.enabled || !state.syncEnabled) return;
 
         var command = state.lastCommand;
         if (!command || command.Command !== 'Unpause') return;
+        if (state.localBuffering || Player.isPaused()) return;
 
         var now = Date.now();
         if (now - state.lastSyncCheck < 500) return;
@@ -601,27 +637,44 @@
         var remoteNow = localToRemote(new Date(now)).getTime();
         var expectedMs = (command.PositionTicks / TICKS_PER_MS) +
             (remoteNow - command.When.getTime());
-        var diff = expectedMs - positionMs;
-        state.lastDiff = diff;
 
+        state.driftSamples.push(expectedMs - positionMs);
+        if (state.driftSamples.length > DRIFT_SAMPLES) state.driftSamples.shift();
+        if (state.driftSamples.length < DRIFT_SAMPLES) return;
+
+        /* The median ignores the odd stale or jumpy sample. */
+        var diff = median(state.driftSamples);
+        state.lastDiff = diff;
         SyncPlay.emit('drift', diff);
 
-        if (Math.abs(diff) > 400) {
+        var avplay = Player.mode === 'avplay';
+        var hardSeekMs = avplay ? HARD_SEEK_AVPLAY_MS : HARD_SEEK_HTML5_MS;
+
+        if (Math.abs(diff) > hardSeekMs) {
+            if (now - state.lastHardSeek < HARD_SEEK_COOLDOWN_MS) return;
+            state.lastHardSeek = now;
             state.syncEnabled = false;
-            quiet(2500);
+            resetDrift();
+            quiet(4000);
             Player.seekTo(expectedMs);
             SyncPlay.emit('resync', diff);
-            syncTimer = setTimeout(function () { state.syncEnabled = true; }, 1500);
+            /* Let the rebuffer finish before measuring again. */
+            syncTimer = setTimeout(function () { state.syncEnabled = true; }, 4000);
             return;
         }
 
-        if (Math.abs(diff) > 60) {
+        /* Smooth catch-up by playback rate. AVPlay only takes whole-number
+           speeds, so a fractional rate there stutters instead of syncing; the
+           HTML5 player handles it fine. */
+        if (!avplay && Math.abs(diff) > 60) {
             var speed = U.clamp(1 + diff / 1000, 0.9, 1.1);
             state.syncEnabled = false;
+            state.speedChanged = true;
+            resetDrift();
             Player.setSpeed(speed);
             SyncPlay.emit('speed-sync', speed);
             syncTimer = setTimeout(function () {
-                Player.setSpeed(1);
+                restoreSpeed();
                 state.syncEnabled = true;
             }, 1000);
         }
