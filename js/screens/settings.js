@@ -101,6 +101,25 @@
                 },
                 'transcode'
             ));
+            list.appendChild(choiceRow(
+                'Maximum bitrate',
+                'Caps the video bitrate. Anything above it is transcoded by the server, so it also saves bandwidth on a slow network or Wi-Fi.',
+                [
+                    { value: 0, label: 'No limit' },
+                    { value: 40, label: '40 Mbps' },
+                    { value: 20, label: '20 Mbps' },
+                    { value: 12, label: '12 Mbps' },
+                    { value: 8, label: '8 Mbps' },
+                    { value: 4, label: '4 Mbps' },
+                    { value: 2, label: '2 Mbps' }
+                ],
+                Store.pref('maxBitrate', 0),
+                function (value) {
+                    Store.setPref('maxBitrate', value);
+                    U.toast('Takes effect on the next playback');
+                },
+                'transcode'
+            ));
             list.appendChild(toggleRow(
                 'Autoplay next episode',
                 'When an episode ends, offer the next one with a 10 second countdown.',

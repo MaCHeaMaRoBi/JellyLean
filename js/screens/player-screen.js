@@ -24,7 +24,11 @@
         INFO: 457
     };
 
-    var FADE_MS = 5000;
+    /* How long the OSD stays after the last key. Nothing may pin it: the info
+       panel and the pickers close together with it. */
+    var FADE_MS = 4000;
+    var FADE_INFO_MS = 9000;      /* long enough to read the playback info */
+    var FADE_PICKER_MS = 20000;   /* audio/subtitle lists the viewer is browsing */
     var PROGRESS_MS = 10000;
     var SEEK_STEP_MS = 10000;
     var SEEK_LONG_MS = 30000;
@@ -50,31 +54,41 @@
         document.body.classList[up ? 'add' : 'remove']('osd-up');
     }
 
+    function osdDelay() {
+        if (session.audioOpen || session.subtitleOpen) return FADE_PICKER_MS;
+        if (session.infoOpen) return FADE_INFO_MS;
+        return FADE_MS;
+    }
+
     function showOsd() {
-        if (!session) return;
+        if (!session || session.fading) return;
         osd.classList.remove('faded');
         setOsdUp(true);
         if (session.fadeTimer) clearTimeout(session.fadeTimer);
-
-        /* A panel the viewer opened, or a focused OSD control, must not vanish
-           from under the remote after five idle seconds. */
-        if (session.infoOpen || session.subtitleOpen || focusInControls()) return;
-        session.fadeTimer = setTimeout(fadeOsd, FADE_MS);
+        session.fadeTimer = setTimeout(fadeOsd, osdDelay());
     }
 
     function fadeOsd() {
         if (!session) return;
-        if (session.infoOpen || session.subtitleOpen || focusInControls()) return;
-        if (els.skipBtn && document.activeElement === els.skipBtn) els.skipBtn.blur();
+
+        /* The close helpers below call showOsd(); `fading` keeps them from
+           bringing the OSD straight back. */
+        session.fading = true;
+        if (session.infoOpen) {
+            session.infoOpen = false;
+            if (els.infoPanel) els.infoPanel.classList.add('hidden');
+        }
+        closeAudio(false);
+        closeSubtitles(false);
+        session.fading = false;
+
+        /* Focus must leave the controls with the OSD, otherwise the next
+           LEFT/RIGHT would move an invisible highlight instead of seeking. */
+        var active = document.activeElement;
+        if (active && active !== document.body && osd.contains(active)) active.blur();
+
         osd.classList.add('faded');
         setOsdUp(false);
-    }
-
-    function focusInControls() {
-        if (!els || !els.buttons) return false;
-        var active = document.activeElement;
-        if (!active) return false;
-        return active === els.skipBtn || active.parentNode === els.buttons;
     }
 
     function flash(message) {
@@ -254,7 +268,8 @@
 
         if (session.playMethod === 'Transcode') {
             infoRow(rows, 'Output', session.outputLabel || 'negotiating\u2026');
-            infoRow(rows, 'Bitrate cap', 'None (1920\u00d71080 max)');
+            var capMbps = Store.pref('maxBitrate', 0);
+            infoRow(rows, 'Bitrate cap', (capMbps > 0 ? capMbps + ' Mbps' : 'None') + ' (1920\u00d71080 max)');
         }
 
         if (audio) {

@@ -203,8 +203,15 @@
     var MAX_WIDTH = 1920;
     var MAX_HEIGHT = 1080;
 
-    function deviceProfile(forceTranscode) {
-        var cap = UNCAPPED_BITRATE;
+    /* The viewer's cap in Mbps (0 = none) as the bits per second Jellyfin wants. */
+    function bitrateCap(maxMbps) {
+        var mbps = Number(maxMbps);
+        if (!isFinite(mbps) || mbps <= 0) return UNCAPPED_BITRATE;
+        return Math.round(mbps * 1000000);
+    }
+
+    function deviceProfile(forceTranscode, maxMbps) {
+        var cap = bitrateCap(maxMbps);
         var profile = {
             Name: 'JellyLean (Samsung Tizen)',
             MaxStreamingBitrate: cap,
@@ -517,11 +524,11 @@
                 StartTimeTicks: opts.startTicks || 0,
                 IsPlayback: true,
                 AutoOpenLiveStream: true,
-                MaxStreamingBitrate: UNCAPPED_BITRATE,
+                MaxStreamingBitrate: bitrateCap(opts.maxBitrate),
                 EnableDirectPlay: !forceTranscode,
                 EnableDirectStream: !forceTranscode,
                 EnableTranscoding: true,
-                DeviceProfile: deviceProfile(forceTranscode)
+                DeviceProfile: deviceProfile(forceTranscode, opts.maxBitrate)
             };
 
             /* Jellyfin only honours SubtitleStreamIndex when the source is
@@ -540,7 +547,8 @@
             return request('POST', '/Items/' + itemId + '/PlaybackInfo', body, params);
         },
 
-        /* A 2017 TV is 1080p. The transcode bitrate is uncapped, so the target
+        /* A 2017 TV is 1080p. Unless the viewer sets a cap in Settings
+           (opts.maxBitrate, Mbps) the transcode bitrate is uncapped, so the target
            resolution can no longer be inferred from it: the device profile
            requires Width/Height <= 1920x1080 and the transcoding URL is pinned
            to maxWidth=1920&maxHeight=1080 (Api.limitResolution) so the server
@@ -558,6 +566,7 @@
                 return Api.playbackInfo(itemId, {
                     startTicks: opts.startTicks || 0,
                     forceTranscode: forceTranscode,
+                    maxBitrate: opts.maxBitrate,
                     mediaSourceId: opts.mediaSourceId,
                     subtitleIndex: subtitleIndex,
                     audioIndex: audioIndex

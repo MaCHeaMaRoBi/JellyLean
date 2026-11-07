@@ -18,7 +18,7 @@
         var wrap = U.el('div', 'form-wrap');
         wrap.innerHTML =
             '<h1 class="form-title">Connect to Jellyfin</h1>' +
-            '<p class="form-sub">Enter the address of your Jellyfin server. It must be reachable from the TV ' +
+            '<p class="form-sub hint">Enter the address of your Jellyfin server. It must be reachable from the TV ' +
             'on your home network, for example <b>192.168.1.20:8096</b> or <b>https://jellyfin.example.com</b>.</p>' +
             '<div class="field"><label for="serverUrl">Server address</label>' +
             '<input id="serverUrl" name="serverUrl" data-focusable tabindex="-1" type="text" autocomplete="url" aria-describedby="setupErr" ' +
@@ -109,6 +109,19 @@
 
         var username = U.$('#username');
         var password = U.$('#password');
+
+        /* The on-screen keyboard hides half the TV, so the viewer needs to see
+           what they type. A password input can only ever show dots; a text input
+           masked with CSS can show the characters while it has focus and dots
+           the rest of the time. Engines without the property keep type=password. */
+        if (document.body.style.webkitTextSecurity !== undefined) {
+            password.type = 'text';
+            password.className = 'secret';
+            password.setAttribute('autocomplete', 'off');
+            password.setAttribute('autocapitalize', 'off');
+            password.setAttribute('autocorrect', 'off');
+            password.setAttribute('spellcheck', 'false');
+        }
         var loginBtn = UI.iconize(U.$('#loginBtn'), 'check', 'Sign In');
         UI.iconize(U.$('#quickBtn'), 'users', 'Quick Connect');
         UI.iconize(U.$('#backBtn'), 'back', 'Back');
@@ -245,6 +258,22 @@
             pendingServer = null;
             var screen = U.el('div', 'screen setup');
             screen.appendChild(U.el('div', 'setup-glow'));
+
+            /* While a text field is focused the TV keyboard covers the lower half
+               of the screen: pack the form into the top half so the field, and
+               what is typed in it, stay visible. */
+            function isTextField(node) {
+                return !!node && node.tagName === 'INPUT';
+            }
+            screen.addEventListener('focus', function (event) {
+                if (isTextField(event.target)) screen.classList.add('typing');
+            }, true);
+            screen.addEventListener('blur', function (event) {
+                if (!isTextField(event.target)) return;
+                setTimeout(function () {
+                    if (!isTextField(document.activeElement)) screen.classList.remove('typing');
+                }, 0);
+            }, true);
 
             var brand = U.el('div', 'setup-brand');
             var mark = U.el('div', 'wordmark');

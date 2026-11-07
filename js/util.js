@@ -240,6 +240,10 @@
                 if (p.scrollTop) p.scrollTop = 0;
             }
         }
+        resetDocumentScroll();
+    }
+
+    function resetDocumentScroll() {
         if (document.body.scrollTop) document.body.scrollTop = 0;
         if (document.documentElement.scrollTop) document.documentElement.scrollTop = 0;
         if (document.body.scrollLeft) document.body.scrollLeft = 0;
@@ -351,7 +355,14 @@
         if (!node) return false;
         keepAnchor = !!opts.keepAnchor;
         node._instant = !!opts.instant;
-        try { node.focus(); } catch (e) { /* detached node */ }
+        /* preventScroll is ignored by older Tizen engines, so the reset below
+           is what really matters. */
+        try { node.focus({ preventScroll: true }); } catch (e) { /* detached node */ }
+        /* Blink scrolls overflow:hidden ancestors AFTER the focus event has
+           been dispatched, so the reset inside onFocusIn runs too early. Left
+           alone, the native offset adds to the transform and the shelf sits
+           half-hidden until the next focus change. */
+        resetNativeScroll(node);
         node._instant = false;
         keepAnchor = false;
         return document.activeElement === node;
@@ -368,10 +379,27 @@
         lazySchedule();
     }
 
+    /* Safety net for every other focus() call (and for late native scrolls):
+       the viewports never scroll natively, the transform is the only truth. */
+    function onNativeScroll(event) {
+        var node = event.target;
+        if (!node || node === document || node === document.documentElement || node === document.body) {
+            resetDocumentScroll();
+            return;
+        }
+        if (!node.classList) return;
+        if (node.classList.contains('row-viewport') || node.classList.contains('viewport') ||
+                node.classList.contains('screen')) {
+            if (node.scrollTop) node.scrollTop = 0;
+            if (node.scrollLeft) node.scrollLeft = 0;
+        }
+    }
+
     function listen() {
         if (listening) return;
         listening = true;
         document.addEventListener('focus', onFocusIn, true);
+        document.addEventListener('scroll', onNativeScroll, true);
     }
 
     function moveFocus(container, direction) {

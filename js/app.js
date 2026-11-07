@@ -306,9 +306,12 @@
         /* A saved image track can only be shown by a transcode with that track
            burned in, so discover the source first, then renegotiate with its
            id and index. Text tracks need no second call. */
+        var maxBitrate = Store.pref('maxBitrate', 0);
+
         return Api.negotiate(item.Id, {
             startTicks: startTicks,
             forceTranscode: forceTranscode,
+            maxBitrate: maxBitrate,
             subtitleIndex: opts.subtitleIndex,
             audioIndex: opts.audioIndex,
             mediaSourceId: opts.mediaSourceId
@@ -333,6 +336,7 @@
             return Api.negotiate(item.Id, {
                 startTicks: startTicks,
                 forceTranscode: true,
+                maxBitrate: maxBitrate,
                 subtitleIndex: image.Index,
                 audioIndex: opts.audioIndex,
                 mediaSourceId: result.source.Id
