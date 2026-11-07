@@ -36,8 +36,14 @@ JellyLean is a client for a Jellyfin server you already trust. Things to know:
   still return stream URLs of its choosing.
 - **SyncPlay**: any member of a group you join can queue playback on your TV.
   Join only groups you trust.
-- **Seerr requests** (Discover tab) are sent with your Jellyfin identity and
-  enforced by the server-side Litefin plugin, not by this client.
+- **Seerr** (Discover tab): the Seerr address and, if you use one, the API key are
+  stored in plain text in the TV app's local storage. They are sent only to that
+  Seerr address. An API key acts as the Seerr user it belongs to (normally the
+  admin), so requests are attributed to that user. Quick Connect and the Jellyfin
+  password attribute them to you instead; Quick Connect approves its code with the
+  TV's existing Jellyfin login and stores nothing, and a typed password is sent
+  only to Seerr and not stored. Their Seerr login cookie lives in the TV's web view.
+  Use a key you can revoke, and prefer a LAN or HTTPS address.
 
 ## Development tooling
 

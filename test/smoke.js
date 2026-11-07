@@ -282,6 +282,10 @@ async function main() {
         check('right reaches Quick Connect',
             (await evaluate("document.activeElement.id")) === 'quickBtn');
 
+        /* Discover talks to Seerr directly: the dev server serves a mock of it
+           under /seerr, and the address and key come from Settings. */
+        await evaluate("Seerr.configure(location.origin + '/seerr', 'dev-key'); true");
+
         await evaluate("document.querySelector('#username').value='dev';" +
             "document.querySelector('#password').value='dev';" +
             "document.querySelector('#loginBtn').click(); true");
@@ -299,7 +303,7 @@ async function main() {
         check('nav lists libraries as tabs',
             await evaluate("Array.prototype.some.call(document.querySelectorAll('.nav .tab')," +
                 " function (b) { return b.textContent.indexOf('Movies') !== -1; })"));
-        check('home exposes Discover when the plugin answers', true);
+        check('home exposes Discover when Seerr answers', true);
         await capture('02-home');
 
         /* The hero only appears when something is resumable, and the mock
@@ -873,8 +877,106 @@ async function main() {
         await evaluate("App.go('settings'); true");
         await waitFor("(document.querySelector('h1.title') || {}).textContent === 'Settings'", 'settings screen');
         await waitFor("document.body.innerText.indexOf('Seerr discovery: Connected') !== -1",
-            'plugin status');
-        check('settings reports the Litefin plugin as connected', true);
+            'seerr status');
+        check('settings reports Seerr as connected', true);
+
+        /* Settings has no text boxes: each option opens its own screen. */
+        check('settings has no inline text boxes for Seerr',
+            (await evaluate("document.querySelectorAll('.list input').length")) === 0);
+        check('settings starts on the API key connection',
+            (await evaluate("Seerr.mode()")) === 'key');
+
+        function clickButton(label) {
+            return evaluate("Array.prototype.filter.call(document.querySelectorAll('.btn, .list-row'), function (b) {" +
+                " return b.className.indexOf('list-row') !== -1 ? b.textContent.indexOf(" + JSON.stringify(label) + ") === 0" +
+                " : b.textContent === " + JSON.stringify(label) + "; })[0].click(); true");
+        }
+        async function backOnSettings(text) {
+            await waitFor("(document.querySelector('h1.title') || {}).textContent === 'Settings' &&" +
+                " document.body.innerText.indexOf(" + JSON.stringify(text) + ") !== -1", 'settings: ' + text, 20000);
+        }
+
+        /* Option: Jellyfin password. A wrong one stays on the prompt. */
+        await clickButton('Use Jellyfin Password');
+        await waitFor("!!document.querySelector('#seerrInput')", 'password prompt');
+        check('the password prompt keeps its field in the top half, above the TV keyboard',
+            (await evaluate("document.querySelector('#seerrInput').getBoundingClientRect().bottom")) < 540);
+        expect401 = true;   /* the wrong password deliberately gets a 401 */
+        await evaluate("document.querySelector('#seerrInput').value = 'nope';" +
+            " document.querySelector('#seerrGo').click(); true");
+        await waitFor("document.querySelector('#seerrErr').textContent.length > 0", 'wrong password message');
+        expect401 = false;
+        check('a wrong Jellyfin password is rejected and keeps the old connection',
+            (await evaluate("Seerr.mode()")) === 'key' &&
+            (await evaluate("!!document.querySelector('#seerrInput')")) === true);
+        await evaluate("document.querySelector('#seerrInput').value = 'dev';" +
+            " document.querySelector('#seerrGo').click(); true");
+        await backOnSettings('Jellyfin sign-in');
+        check('Jellyfin password connects Seerr without an API key',
+            (await evaluate("Seerr.mode() + ':' + Store.pref('seerrKey', '')")) === 'session:');
+        check('the session works for real Seerr calls',
+            (await evaluate("Seerr.trending().then(function (l) { return l.length > 0; })")) === true);
+
+        /* Disconnect keeps the address, so Quick Connect is one press. */
+        await clickButton('Disconnect Seerr');
+        await waitFor("document.body.innerText.indexOf('Not connected') !== -1", 'disconnected');
+        check('disconnecting forgets the login but keeps the address',
+            (await evaluate("Seerr.mode() + ':' + Seerr.configured() + ':' + (Seerr.url().length > 0)")) === ':false:true');
+
+        /* Option: Quick Connect. The TV approves Seerr's code with its own
+           Jellyfin login, so nothing is typed. */
+        await clickButton('Quick Connect');
+        await backOnSettings('Jellyfin sign-in');
+        check('Quick Connect signs in with no typing',
+            (await evaluate("Seerr.mode() + ':' + Store.pref('seerrKey', '')")) === 'session:');
+
+        /* With no address saved, an option asks for it first, starting from the
+           Jellyfin host on port 5055. */
+        await evaluate("Seerr.disconnect().then(function () { Store.setPref('seerrUrl', ''); window.__off = 1; })");
+        await waitFor("window.__off === 1", 'address cleared');
+        await evaluate("window.__off = 0; App.go('settings'); true");
+        await waitFor("document.body.innerText.indexOf('Not set') !== -1", 'address not set');
+        await clickButton('Quick Connect');
+        await waitFor("!!document.querySelector('#seerrInput')", 'address prompt');
+        check('the address prompt starts from the Jellyfin host on port 5055',
+            (await evaluate("document.querySelector('#seerrInput').value")) === 'http://localhost:5055');
+        await evaluate("document.querySelector('#seerrInput').value = location.origin + '/seerr';" +
+            " document.querySelector('#seerrGo').click(); true");
+        await backOnSettings('Jellyfin sign-in');
+        check('after the address, Quick Connect continues and connects',
+            (await evaluate("Seerr.mode() + ':' + Seerr.url()")) === 'session:' + (await evaluate("location.origin")) + '/seerr');
+
+        /* When the TV cannot approve the code itself, the code is shown so it can
+           be entered in Jellyfin on another device. */
+        await evaluate("Seerr.disconnect().then(function () {" +
+            " var real = Api.quickConnectAuthorize;" +
+            " Api.quickConnectAuthorize = function () { return Promise.reject(new Error('cannot approve')); };" +
+            " Seerr.quickConnect(location.origin + '/seerr', { onCode: function (code) {" +
+            "   window.__qcCode = code; setTimeout(function () { real.call(Api, code); }, 300); } })" +
+            ".then(function () { Api.quickConnectAuthorize = real; window.__qcDone = true; }); })");
+        await waitFor("window.__qcDone === true", 'manual quick connect', 20000);
+        check('an unapproved code is shown for manual entry',
+            /^\d{6}$/.test(await evaluate("window.__qcCode")));
+        check('the manually approved code signs in', (await evaluate("Seerr.mode()")) === 'session');
+
+        /* Option: API key. A key Seerr rejects must not replace a working login. */
+        await clickButton('Use API Key');
+        await waitFor("!!document.querySelector('#seerrInput')", 'api key prompt');
+        await evaluate("document.querySelector('#seerrInput').value = ''; document.querySelector('#seerrGo').click(); true");
+        await waitFor("document.querySelector('#seerrErr').textContent.length > 0", 'empty key message');
+        await evaluate("document.querySelector('#seerrInput').value = 'dev-key';" +
+            " document.querySelector('#seerrGo').click(); true");
+        await backOnSettings('API key');
+        check('an API key still works', (await evaluate("Seerr.mode()")) === 'key');
+
+        /* The address row changes the address; a new address drops the old login. */
+        await clickButton('Seerr address');
+        await waitFor("!!document.querySelector('#seerrInput')", 'address row prompt');
+        check('the address row shows the saved address',
+            /\/seerr$/.test(await evaluate("document.querySelector('#seerrInput').value")));
+        await evaluate("document.querySelector('#seerrCancel').click(); true");
+        await backOnSettings('API key');
+        check('cancelling the address prompt changes nothing', (await evaluate("Seerr.mode()")) === 'key');
 
         var diagnostics = await evaluate(
             "Array.prototype.filter.call(document.querySelectorAll('.status-line')," +

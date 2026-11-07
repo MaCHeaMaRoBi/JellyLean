@@ -315,10 +315,26 @@ var SEERR_ALL = SEERR_MOVIES.concat(SEERR_TV);
 var SEERR_TRENDING = [SEERR_MOVIES[0], SEERR_TV[0], SEERR_MOVIES[1], SEERR_TV[1], SEERR_MOVIES[2]];
 
 var seerrRequests = [];
+var seerrQuick = {};      /* code -> { secret, approved } */
 var nextRequestId = 501;
 
 function seerrTitle(item) {
     return item.title || item.name || '';
+}
+
+/* Seerr's real paths -> the internal route names the fixtures below use. */
+function seerrRoute(path, method) {
+    var lower = path.toLowerCase();
+    if (lower === '/auth/me') return '/User';
+    if (lower === '/status') return '/Status';
+    if (lower === '/request') return '/Requests';
+    if (lower === '/discover/watchlist') return '/Watchlist';
+    if (lower === '/watchlist') return '/Watchlist';
+    var del = /^\/watchlist\/(\d+)$/.exec(lower);
+    if (del) return '/Watchlist/' + del[1];
+    var one = /^\/request\/(\d+)$/.exec(lower);
+    if (one) return '/Requests/' + one[1];
+    return path.replace(/\/(\w)/g, function (m, c) { return '/' + c.toUpperCase(); });
 }
 
 function seerrFind(mediaType, id) {
@@ -542,7 +558,7 @@ async function handleApi(req, res, url) {
         pathname === '/GetUtcTime';
 
     /* Only the API is guarded; the app's own static files must stay reachable. */
-    var isApiPath = /^\/(Users|Items|Shows|MediaSegments|Episode|SyncPlay|Sessions|Videos|System|PlaybackInfo|GetUtcTime|QuickConnect|Litefin)\b/.test(pathname);
+    var isApiPath = /^\/(Users|Items|Shows|MediaSegments|Episode|SyncPlay|Sessions|Videos|System|PlaybackInfo|GetUtcTime|QuickConnect)\b/.test(pathname);
 
     if (isApiPath && !anonymous && requestToken(req, url) !== TOKEN) {
         res.writeHead(401, { 'Content-Length': '0' });
@@ -564,6 +580,15 @@ async function handleApi(req, res, url) {
 
     if (pathname === '/Users/AuthenticateWithQuickConnect' && method === 'POST') {
         json(res, 200, { AccessToken: TOKEN, ServerId: 'devserver', User: USER });
+        return true;
+    }
+
+    /* A Seerr Quick Connect code is approved here, by the signed-in device. */
+    if (pathname === '/QuickConnect/Authorize' && method === 'POST') {
+        var approveCode = url.searchParams.get('code');
+        if (!approveCode || !seerrQuick[approveCode]) { json(res, 404, { Message: 'Unknown code' }); return true; }
+        seerrQuick[approveCode].approved = true;
+        json(res, 200, true);
         return true;
     }
 
@@ -746,11 +771,71 @@ async function handleApi(req, res, url) {
 
 
     /* ------------------------------------------------------- Seerr mock */
-    /* The Litefin plugin proxies Seerr; these fixtures mirror the shapes the
-       real plugin returns so Discover, detail, requests and the watchlist can
-       be exercised without a Seerr instance. */
-    if (pathname.indexOf('/Litefin/Seerr') === 0) {
-        var seerrPath = pathname.slice('/Litefin/Seerr'.length);
+    /* Fixtures shaped like Seerr's own API, served at /seerr/api/v1 so
+       Discover, detail, requests and the watchlist can be exercised without a
+       Seerr instance. In Settings use http://<this host>/seerr and any key. */
+    if (pathname.indexOf('/seerr/api/v1') === 0) {
+        var seerrPath = seerrRoute(pathname.slice('/seerr/api/v1'.length), method);
+
+        /* Seerr accepts either an API key or the cookie from a Jellyfin login. */
+        if (seerrPath === '/Auth/Jellyfin' && method === 'POST') {
+            var loginBody = await readBody(req);
+            if (!loginBody.username || loginBody.password !== 'dev') {
+                json(res, 401, { message: 'Invalid Jellyfin credentials' });
+                return true;
+            }
+            res.writeHead(200, {
+                'Content-Type': 'application/json',
+                'Set-Cookie': 'connect.sid=dev-session; Path=/; HttpOnly'
+            });
+            res.end(JSON.stringify({ id: 2, displayName: loginBody.username, permissions: 2 }));
+            return true;
+        }
+        /* Quick Connect, as Seerr 3.4 serves it. */
+        if (seerrPath === '/Auth/Jellyfin/Quickconnect/Initiate' && method === 'POST') {
+            var code = String(100000 + Math.floor(Math.random() * 899999));
+            var secret = crypto.randomBytes(16).toString('hex');
+            seerrQuick[code] = { secret: secret, approved: false };
+            json(res, 200, { code: code, secret: secret });
+            return true;
+        }
+        function quickBySecret(value) {
+            for (var known in seerrQuick) {
+                if (seerrQuick[known].secret === value) return seerrQuick[known];
+            }
+            return null;
+        }
+        if (seerrPath === '/Auth/Jellyfin/Quickconnect/Check' && method === 'GET') {
+            var checked = quickBySecret(url.searchParams.get('secret'));
+            if (!checked) { json(res, 400, { message: 'Invalid secret format' }); return true; }
+            json(res, 200, { authenticated: checked.approved });
+            return true;
+        }
+        if (seerrPath === '/Auth/Jellyfin/Quickconnect/Authenticate' && method === 'POST') {
+            var quickBody = await readBody(req);
+            var chosen = quickBySecret(quickBody.secret);
+            if (!chosen || !chosen.approved) { json(res, 403, { message: 'Access denied.' }); return true; }
+            res.writeHead(200, {
+                'Content-Type': 'application/json',
+                'Set-Cookie': 'connect.sid=dev-session; Path=/; HttpOnly'
+            });
+            res.end(JSON.stringify({ id: 2, displayName: 'Dev', permissions: 2 }));
+            return true;
+        }
+
+        var seerrCookie = /(?:^|;\s*)connect\.sid=dev-session/.test(req.headers.cookie || '');
+        if (!req.headers['x-api-key'] && !seerrCookie) {
+            json(res, 401, { message: 'Unauthorized' });
+            return true;
+        }
+        if (seerrPath === '/Auth/Logout' && method === 'POST') {
+            res.writeHead(200, {
+                'Content-Type': 'application/json',
+                'Set-Cookie': 'connect.sid=; Path=/; Max-Age=0'
+            });
+            res.end('{"status":"ok"}');
+            return true;
+        }
 
         if (seerrPath === '/Status') {
             json(res, 200, { configured: true, available: true });
@@ -860,16 +945,16 @@ async function handleApi(req, res, url) {
         }
         if (seerrPath === '/Watchlist' && method === 'POST') {
             var watchBody = await readBody(req);
-            var watchTarget = seerrFind(watchBody.mediaType, watchBody.mediaId);
+            var watchTarget = seerrFind(watchBody.mediaType, watchBody.tmdbId);
             if (!watchTarget) { json(res, 404, { message: 'Title not found' }); return true; }
             watchTarget.onUserWatchlist = true;
-            json(res, 201, { mediaType: watchBody.mediaType, mediaId: watchBody.mediaId });
+            json(res, 201, { mediaType: watchBody.mediaType, tmdbId: watchBody.tmdbId });
             return true;
         }
 
-        parts = /^\/Watchlist\/(movie|tv)\/(\d+)$/.exec(seerrPath);
+        parts = /^\/Watchlist\/(\d+)$/.exec(seerrPath);
         if (parts && method === 'DELETE') {
-            var watchRemove = seerrFind(parts[1], Number(parts[2]));
+            var watchRemove = seerrFind('movie', Number(parts[1])) || seerrFind('tv', Number(parts[1]));
             if (watchRemove) watchRemove.onUserWatchlist = false;
             noContent(res);
             return true;
@@ -1051,7 +1136,7 @@ var server = http.createServer(function (req, res) {
         res.writeHead(204, {
             'Access-Control-Allow-Origin': '*',
             'Access-Control-Allow-Headers': '*',
-            'Access-Control-Allow-Methods': 'GET,POST,OPTIONS'
+            'Access-Control-Allow-Methods': 'GET,POST,DELETE,OPTIONS'
         });
         res.end();
         return;

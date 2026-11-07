@@ -160,30 +160,74 @@
                 'tv'
             ));
 
+            /* Three ways to connect Seerr. Nothing is typed here: each option opens
+               its own short screen (js/screens/seerr-connect.js) that asks only
+               for what that option needs. */
+            list.appendChild(UI.listRow({
+                title: 'Seerr address',
+                desc: 'Where Seerr runs on your network. Quick Connect, the Jellyfin password and an API key all use it.',
+                icon: 'compass',
+                value: (global.Seerr && Seerr.url()) || 'Not set',
+                key: 'set-seerr-address',
+                onClick: function () { App.go('seerrConnect', { method: 'address' }); }
+            }));
+
             var seerr = statusBlock('set-seerr', 'Seerr discovery status');
-            seerr.line.textContent = 'Checking the Litefin plugin…';
             list.appendChild(seerr.box);
 
-            if (global.Seerr) {
-                Seerr.status(true).then(function (status) {
+            function checkSeerr(force) {
+                if (!global.Seerr) {
+                    seerr.line.textContent = 'Seerr discovery: client not loaded.';
+                    return;
+                }
+                if (!Seerr.configured()) {
+                    seerr.line.innerHTML = 'Seerr discovery: <b>Not connected</b>' +
+                        '<br>Choose Quick Connect, or use your Jellyfin password or an API key.';
+                    return;
+                }
+                seerr.line.textContent = 'Checking Seerr\u2026';
+                Seerr.status(force).then(function (status) {
                     if (status && status.available) {
-                        seerr.line.innerHTML = 'Seerr discovery: <b>Connected</b>';
+                        seerr.line.innerHTML = 'Seerr discovery: <b>Connected</b>' +
+                            (status.user && (status.user.displayName || status.user.username)
+                                ? ' as ' + U.esc(status.user.displayName || status.user.username) : '') +
+                            ' \u00b7 ' + (Seerr.mode() === 'session' ? 'Jellyfin sign-in' : 'API key');
                         return;
                     }
-                    if (status && status.configured) {
-                        seerr.line.innerHTML = 'Seerr discovery: <b>Configured, not reachable</b>' +
-                            '<br>Check the Seerr URL and API key in the Litefin plugin settings.';
-                        return;
-                    }
-                    seerr.line.innerHTML = 'Seerr discovery: <b>Not configured</b>' +
-                        '<br>Install the Litefin plugin, then add its repository in Dashboard → Plugins:' +
-                        '<br>https://raw.githubusercontent.com/MoazSalem/litefin-plugin/release/manifest.json';
+                    var why = status && status.error && status.error.status
+                        ? status.error.message
+                        : 'could not reach ' + U.esc(Seerr.url());
+                    seerr.line.innerHTML = 'Seerr discovery: <b>Not reachable</b>' +
+                        '<br>' + U.esc(why) + '.';
                 }).catch(function () {
-                    seerr.line.textContent = 'Seerr discovery: could not check the plugin.';
+                    seerr.line.textContent = 'Seerr discovery: could not check Seerr.';
                 });
-            } else {
-                seerr.line.textContent = 'Seerr discovery: plugin client not loaded.';
             }
+
+            function connectButton(label, icon, method, primary) {
+                return UI.button({
+                    label: label, icon: icon, primary: !!primary, key: 'set-seerr-' + method,
+                    onClick: function () { App.go('seerrConnect', { method: method }); }
+                });
+            }
+            var forget = UI.button({
+                label: 'Disconnect Seerr', icon: 'logout', key: 'set-seerr-off',
+                onClick: function () {
+                    Seerr.disconnect().then(function () {
+                        U.toast('Seerr disconnected');
+                        checkSeerr(false);
+                    });
+                }
+            });
+            list.appendChild(UI.buttonRow([
+                connectButton('Quick Connect', 'users', 'quick', true),
+                connectButton('Use Jellyfin Password', 'users', 'password')
+            ], { className: 'pad' }));
+            list.appendChild(UI.buttonRow([
+                connectButton('Use API Key', 'check', 'key'),
+                forget
+            ], { className: 'pad' }));
+            checkSeerr(true);
 
             list.appendChild(section('Server & Device'));
             var device = statusBlock('set-device', 'Server and device details');

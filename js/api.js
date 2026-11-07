@@ -394,6 +394,12 @@
             return request('GET', '/Users/Me');
         },
 
+        /* Approve a Quick Connect code with this device's own Jellyfin login.
+           Used to sign in to Seerr without typing anything. */
+        quickConnectAuthorize: function (code) {
+            return request('POST', '/QuickConnect/Authorize', null, { code: code });
+        },
+
         logout: function () {
             return request('POST', '/Sessions/Logout').catch(function () { /* token may already be gone */ });
         },

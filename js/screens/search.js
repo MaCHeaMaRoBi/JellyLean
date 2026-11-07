@@ -1,5 +1,5 @@
 /* Unified search: the Jellyfin library first, then Seerr discovery when the
-   Litefin plugin is available. */
+   Seerr is set up. */
 (function (global) {
     'use strict';
 

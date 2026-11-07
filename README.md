@@ -30,8 +30,8 @@ run on any Tizen TV from 2015 onwards.
 ## Features
 
 - **Browse** — Continue Watching hero, a latest row per library, full library
-  grids, details with seasons and episodes, unified search, and Discover (Seerr)
-  through the optional Litefin plugin.
+  grids, details with seasons and episodes, unified search, and Discover
+  (Jellyseerr / Overseerr, see [Connecting Seerr](#connecting-seerr)).
 - **Play** — Samsung AVPlay hardware decoding with an HTML5 fallback, automatic
   transcode retry when direct play fails, up-next autoplay, resume positions and
   watched state.
@@ -65,6 +65,27 @@ run on any Tizen TV from 2015 onwards.
 
 A direct network path is required: `http://192.168.x.x:8096`, or HTTPS with a
 certificate the TV trusts. Self-signed certificates are usually rejected.
+
+## Connecting Seerr
+
+Discover talks to your own Seerr (Jellyseerr / Overseerr). Open
+**Settings → Discover** and choose how to connect. Nothing is typed in Settings
+itself: each option opens its own short screen that asks only for what it needs.
+
+- **Quick Connect** — nothing to type. The TV asks Seerr for a code and approves
+  it with its own Jellyfin login, so requests are made as you. Needs Seerr 3.4 or
+  newer, signed in to the same Jellyfin. If the TV cannot approve the code itself
+  it shows it, and you enter it in Jellyfin → Settings → Quick Connect on another
+  device.
+- **Use Jellyfin Password** — asks for your Jellyfin password once. Also makes
+  requests as you.
+- **Use API Key** — asks for the key (Seerr → Settings → General). Requests are
+  made as the key's owner, usually the admin. A key Seerr rejects is not kept.
+
+The first time, the option also asks for the **Seerr address**, starting from your
+Jellyfin host on port 5055. Change it later from the *Seerr address* row. The
+field is always in the top half of the screen, so it stays visible above the TV
+keyboard.
 
 ## Install
 
@@ -288,8 +309,6 @@ Seerr/Jellyseerr/Overseerr projects, or TMDB.
   and contains none of its code.
 - **Samsung Tizen / AVPlay** is provided by the TV firmware at runtime and is not
   redistributed here.
-- **Litefin plugin** ([MoazSalem/litefin-plugin](https://github.com/MoazSalem/litefin-plugin))
-  powers the optional Discover tab; it is a separate project and is not bundled.
 - **TMDB / JustWatch** provide Discover artwork and availability data. This product
   uses the TMDB API but is not endorsed or certified by TMDB.
 - **Fonts** (Figtree, Bricolage Grotesque) are under the SIL Open Font License 1.1;

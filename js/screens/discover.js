@@ -10,8 +10,6 @@
 
     var ROW_LIMIT = 20;
 
-    var MANIFEST = 'https://raw.githubusercontent.com/MoazSalem/litefin-plugin/release/manifest.json';
-
     function slice(list) {
         return (list || []).slice(0, ROW_LIMIT);
     }
@@ -83,16 +81,16 @@
         var scroll = shell.scroll;
         U.clear(scroll);
         scroll.appendChild(U.el('h1', 'title', 'Discover'));
-        scroll.appendChild(UI.empty(
-            'Seerr discovery is not available yet. Install the Litefin plugin on the ' +
-            'Jellyfin server and configure its Seerr URL and API key.'));
-        var hint = U.el('p', 'note', 'Plugin repository: ' + MANIFEST);
-        hint.style.wordBreak = 'break-all';
-        scroll.appendChild(hint);
+        scroll.appendChild(UI.empty(Seerr.configured()
+            ? 'Seerr is not reachable. Check the address and API key in Settings, then try again.'
+            : 'Seerr discovery is not set up yet. Open Settings and enter your Seerr address and API key.'));
 
         scroll.appendChild(UI.buttonRow([UI.button({
             label: 'Check Again', icon: 'refresh', primary: true,
             onClick: function () { Seerr.reset(); retry(); }
+        }), UI.button({
+            label: 'Open Settings', icon: 'settings',
+            onClick: function () { App.go('settings'); }
         })], { className: 'pad' }));
         U.focusFirst(shell.screen);
     }
