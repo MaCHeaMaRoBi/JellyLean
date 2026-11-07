@@ -6,7 +6,7 @@
     var CLIENT_NAME = 'JellyLean';
     /* Must equal the widget version in config.xml; scripts/build.sh fails the
        build when they differ. */
-    var CLIENT_VERSION = '1.0.4';
+    var CLIENT_VERSION = '1.0.5';
 
     /* What the browse screens need to draw a card and the Home stage: art for
        every role (backdrop and logo feed the ambient stage) and the text that
