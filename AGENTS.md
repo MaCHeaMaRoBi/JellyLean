@@ -9,7 +9,7 @@ Rules:
 - Dirty `graphify-out/` outputs are expected after hooks; don’t skip graphify unless the task is about stale/incorrect graph output, or the user says not to.
 - Use `graphify-out/wiki/index.md` for broad navigation (not raw browsing).
 - Read `graphify-out/GRAPH_REPORT.md` only for broad architecture review when query/path/explain isn’t enough.
-- After modifying code, run `graphify update .`.
+- After modifying code or docs, run `graphify update .`.
 
 ## Tizen / widget build & install (avoid guessing)
 
@@ -37,8 +37,13 @@ Rules:
   - `node test/smoke.js`
   - Screenshots: `SHOTS=1 node test/smoke.js`
   - Browser path: `CHROME=/path/to/chromium node test/smoke.js`
-- Live check against a real Jellyfin server (read-only; validates login, images, media segments, playback negotiation, SyncPlay socket):
+- Regression tests that need no server:
+  - `node test/syncplay.js` → SyncPlay state machine, pause/resume feedback loop, drift correction
+  - `node test/osd.js` → OSD fade behaviour. Needs jsdom; it silently skips when jsdom is absent (`JSDOM_DIR=/tmp/jd node test/osd.js` to point at an install)
+  - `node scripts/check-design.js` → every stylesheet colour must be defined in `DESIGN.md`
+- Live check against a real Jellyfin server (read-only; validates login, images, media segments, playback negotiation, subtitles, SyncPlay socket):
   - `JF_URL=http://192.168.1.20:8096 JF_USER=me JF_PASS=secret node test/live.js`
+  - `NO_MOCK=1 node scripts/dev-server.js` serves only the app, for driving the real client against a real server by hand.
 
 ## Playback / subtitle constraints that affect code changes
 
@@ -48,8 +53,22 @@ Rules:
 - Playback engine selection is critical on the TV:
   - `AVPlay` depends on `$WEBAPIS/webapis/webapis.js` being present (Tizen resolves it on the device; the dev server stubs it).
   - If `$WEBAPIS/webapis/webapis.js` include is broken, AVPlay may be skipped and MKV decoding can appear as black screen.
+- Bitrate policy:
+  - The default is **uncapped** with the transcode resolution pinned to 1920x1080 (`Api.limitResolution`). Do not reintroduce a default cap.
+  - `maxBitrate` (Settings → Maximum bitrate, `0` = no limit) is an opt-in cap and must reach both `PlaybackInfo` and the device profile.
+  - The device profile deliberately does not claim HEVC/DTS; a 4K HEVC remux is expected to transcode.
 
 ## SyncPlay expectations
 
 - The client authenticates the SyncPlay WebSocket using both `api_key` and `ApiKey` query spellings (12.x vs older servers).
-- If drift handling is modified, keep the existing “schedule commands with server timestamps + resync on large drift” behavior; the smoke/live tests assert SyncPlay socket reachability.
+- Pause/Unpause must **not** answer the server with Ready or Buffering: doing so re-triggers the command and pauses the whole group in a loop. Only a Seek is acknowledged, with exactly one Ready.
+- If drift handling is modified, keep the existing “schedule commands with server timestamps + resync on large drift” behavior. Only seek on a sustained real desync; noisy position readings must not cause seeks.
+- Run `node test/syncplay.js` after touching this; the smoke/live tests only assert SyncPlay socket reachability.
+
+## Release checklist
+
+1. Bump `version` in `config.xml` and `CLIENT_VERSION` in `js/api.js` together (the build guards version drift).
+2. `graphify update .`, then `scripts/build.sh`.
+3. Verify `dist/JellyLean.wgt`: version, app/package ids, `required_version="2.3"`, both author and distributor signatures, sha256.
+4. Commit, `git fetch`/rebase, push `main`, tag `vX.Y.Z`, push the tag.
+5. Create the GitHub release and upload the asset **named exactly `JellyLean.wgt`** (Apps2Samsung catalog sync matches that name). Download it back and compare sha256.
