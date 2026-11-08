@@ -54,6 +54,7 @@ Installed globally (`npm i -g ruflo`) and registered in `~/.config/opencode/open
   - Screenshots: `SHOTS=1 node test/smoke.js`
   - Browser path: `CHROME=/path/to/chromium node test/smoke.js`
 - Regression tests that need no server:
+  - `node test/profile.js` → device profile (codecs, channels, HEVC, resolution caps) and audio-track logic; run it after touching `deviceProfile` in `js/api.js` or `js/audio.js`
   - `node test/syncplay.js` → SyncPlay state machine, pause/resume feedback loop, drift correction
   - `node test/osd.js` → OSD fade behaviour. Needs jsdom; it silently skips when jsdom is absent (`JSDOM_DIR=/tmp/jd node test/osd.js` to point at an install)
   - `node scripts/check-design.js` → every stylesheet colour must be defined in `DESIGN.md`

@@ -681,6 +681,29 @@ async function main() {
             'audio info closed');
         check('BACK closes the info panel after an audio switch', await evaluate("Player.isOpen()"));
 
+        /* ----------------------------------------- remembered audio language */
+
+        /* Picking French above is remembered for this title, so playing it
+           again must start on the French track (Index 5) with no new pick. */
+        var rememberStamp = await evaluate("App.lastPlayback.at");
+        await evaluate("App.playItem(Player.getItem(), { startTicks: 0 }); true");
+        await waitFor("window.Player && Player.isOpen() && App.lastPlayback &&" +
+            " App.lastPlayback.at !== " + Number(rememberStamp || 0), 'replay with remembered audio', 30000);
+        var rememberedUrl = await evaluate("(Player.getMediaSource() || {}).TranscodingUrl || ''");
+        check('a picked audio language is remembered for the title',
+            /AudioStreamIndex=5\b/.test(rememberedUrl), rememberedUrl);
+
+        /* The Settings language applies to a title with nothing remembered. */
+        await evaluate("Store.setPref('audioChoices', {}); Store.setPref('audioLanguage', 'fra'); true");
+        var settingStamp = await evaluate("App.lastPlayback.at");
+        await evaluate("App.playItem(Player.getItem(), { startTicks: 0 }); true");
+        await waitFor("window.Player && Player.isOpen() && App.lastPlayback &&" +
+            " App.lastPlayback.at !== " + Number(settingStamp || 0), 'replay with Settings language', 30000);
+        var settingUrl = await evaluate("(Player.getMediaSource() || {}).TranscodingUrl || ''");
+        check('the Settings audio language starts the title in that language',
+            /AudioStreamIndex=5\b/.test(settingUrl), settingUrl);
+        await evaluate("Store.setPref('audioLanguage', ''); Store.setPref('audioChoices', {}); true");
+
         await evaluate("SyncPlay.emit('load', { itemId: 'ep1', playlistItemId: 'pl-ep1', startTicks: 0, reason: 'NewPlaylist' }); true");
         await waitFor("window.Player && Player.getItem() && Player.getItem().Id === 'ep1'", 'group load');
         check('a SyncPlay load switches to the requested item', true);
@@ -986,6 +1009,12 @@ async function main() {
             "Array.prototype.filter.call(document.querySelectorAll('.status-line')," +
             " function (n) { return /Engine/.test(n.textContent); })[0].textContent");
         check('settings reports the playback engine', /HTML5/.test(diagnostics), diagnostics);
+
+        var audioRowsText = await evaluate(
+            "['set-Audio output','set-Audio language','set-Allow HEVC direct play'].map(function (k) {" +
+            " var n = document.querySelector('[data-key=\"' + k + '\"]'); return n ? n.textContent : ''; }).join('|')");
+        check('settings offers the audio output, language and HEVC options',
+            /Surround/.test(audioRowsText) && /Auto/.test(audioRowsText) && /Off/.test(audioRowsText), audioRowsText);
 
         var topIcons = await evaluate("document.querySelectorAll('.btn svg.icon').length");
         check('settings buttons carry icons', topIcons >= 2, String(topIcons));

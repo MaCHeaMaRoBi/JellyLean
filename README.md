@@ -49,6 +49,9 @@ run on any Tizen TV from 2015 onwards.
   per series) and an audio-track picker. Text subtitles are fetched as WebVTT and
   drawn by the client, so they do not force a transcode; image subtitles
   (PGS/VOBSUB) restart with a burn-in.
+- **Surround sound** — up to 5.1 (AC3 / E-AC3) is kept end to end, including when
+  only the video needs transcoding; see [Audio](#audio). A preferred audio
+  language, and the track you pick for a movie or series, are remembered.
 - **Skip Intro / Credits / Recap** — Jellyfin 10.10 Media Segments, with a fallback
   to the Intro Skipper plugin on 10.8/10.9.
 - **SyncPlay** — create or join a group, clock-offset estimation, shared queue,
@@ -203,6 +206,7 @@ node test/smoke.js        # headless Chromium UI test; fails on console errors
 node test/live.js         # read-only checks against a real server
 node test/syncplay.js     # SyncPlay state machine and drift correction
 node test/osd.js          # OSD fade (skipped when jsdom is not installed)
+node test/profile.js      # device profile and audio-track logic, no server needed
 node scripts/check-design.js
 ```
 
@@ -216,6 +220,34 @@ JF_URL=http://192.168.1.20:8096 JF_USER=me JF_PASS=secret node test/live.js
 
 `SHOTS=1 node test/smoke.js` writes screenshots to `.dev/screenshots`;
 `CHROME=/path/to/chromium` selects a browser.
+
+## Audio
+
+By default the client asks for **Surround (5.1)**:
+
+| Source | Direct play | When the server transcodes |
+| --- | --- | --- |
+| AAC, MP3, AC3, E-AC3 up to 6 channels | untouched | kept as AC3 / E-AC3 / AAC, up to 6 channels |
+| DTS, DTS-HD, TrueHD, FLAC, Opus | not claimed, so the server converts it | 5.1 AC3 |
+| 7.1 E-AC3 or AAC | converted (the TV passes 5.1 at most) | 5.1 AC3 |
+
+**Settings → Audio output → Stereo** has the server mix everything down to two
+channels AAC instead, for TVs with no soundbar or receiver.
+
+The TV only passes 5.1 on to speakers it is connected to, so set the TV's own
+**Digital Audio Output** to *Pass-Through* (or *Auto*) when using HDMI ARC or
+optical. Optical carries Dolby Digital only, not E-AC3, and the TV's built-in
+speakers are stereo.
+
+**Audio language.** **Settings → Audio language** starts every title in that
+language when the file has it (never a commentary track unless it is the only
+one). A track picked in the player is remembered for that movie or series and wins
+over the Settings language. On a direct play, a track the TV can decode is
+selected inside AVPlay with no restart; anything else (DTS, TrueHD, or a track
+order AVPlay does not report the way the file does) restarts through the server.
+
+**Playback info** (the INFO key) shows the audio the server will send and why a
+stream is being transcoded.
 
 ## Remote controls
 
@@ -242,20 +274,24 @@ index.html      static shell: #app for screens, #stage + #osd for video
 css/app.css     TV stylesheet — flexbox only, no grid/gap/custom properties
 js/api.js       Jellyfin REST client, device profile, WebSocket
 js/player.js    AVPlay + HTML5 playback engine, stall watchdog
+js/audio.js     audio track choice, language matching, AVPlay track mapping
 js/subtitles.js WebVTT parsing and the cue overlay
 js/syncplay.js  SyncPlay group, queue, time sync, commands, drift
-js/screens/     setup, home, library, detail, player, search, discover, syncplay, settings
+js/screens/     setup, home, library, detail, player (+ audio picker), search, discover, syncplay, settings
 scripts/        build, install, signing setup, dev server
-test/           smoke, live, syncplay, osd
+test/           smoke, live, syncplay, osd, profile
 ```
 
 **Playback.** `/Items/{id}/PlaybackInfo` negotiates against a device profile that
-claims H.264 up to 1080p and AAC/MP3/AC3/E-AC3. HEVC is deliberately not claimed:
-a UHD remux would direct-play to a black picture on this panel, so the server
-transcodes it instead. Transcoded streams are uncapped but pinned to 1920x1080
+claims H.264 up to 1080p and AAC/MP3/AC3/E-AC3. HEVC is not claimed by default:
+a UHD remux direct-played to a black picture on the test panel, so the server
+transcodes it instead. **Settings → Allow HEVC direct play** claims it (still
+capped at 1080p) for TVs that handle it. Transcoded streams are uncapped but pinned to 1920x1080
 through `maxWidth`/`maxHeight`, because Jellyfin otherwise derives the resolution
 from the bitrate. A direct stream that errors, or reports no frames for 12 seconds,
-is retried once through HLS.
+is retried once through HLS, and so is a direct play where the file has audio but
+AVPlay lists no audio track (the TV dropped a track it cannot decode, so the
+picture would play in silence).
 
 **Subtitles.** Text tracks are fetched as WebVTT and drawn over the video, so an
 embedded `subrip` track does not force a transcode. Subtitle parameters are
@@ -287,7 +323,9 @@ That has two practical consequences:
 
 - No Live TV/DVR, playlists, or dedicated music UI.
 - Image subtitles restart playback briefly while the server burns them in.
-- HEVC and DTS are never claimed, so a 4K HEVC remux always transcodes (by design).
+- DTS and TrueHD are never claimed, so those tracks are always converted by the
+  server (to 5.1 AC3); there is no bitstream passthrough of them. HEVC transcodes
+  unless **Allow HEVC direct play** is on.
 - HTTPS requires a certificate the TV trusts; a self-signed certificate will fail.
 - The token is stored unencrypted in the TV's web storage — sign out before
   handing the TV on.
@@ -311,6 +349,14 @@ changing developer mode.
 negotiated stream, enable **Settings → Force transcoding**, and make sure the
 built `index.html` still loads `$WEBAPIS/webapis/webapis.js`, otherwise AVPlay
 is skipped.
+
+**No surround sound** — open the INFO panel: *Audio output* shows what the server
+sent. If it says AC3 or E-AC3 with 6 channels, the TV is receiving 5.1: set its
+Digital Audio Output to *Pass-Through* and check the ARC/optical connection. If it
+says AAC or 2 channels, check **Settings → Audio output** is on Surround.
+
+**Silent video after turning on HEVC direct play** — turn **Allow HEVC direct
+play** off again; that TV cannot decode the file.
 
 **Skip Intro never appears** — needs Jellyfin 10.10+ Media Segments, or the Intro
 Skipper plugin on 10.8/10.9, and analysed episodes.

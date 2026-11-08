@@ -210,23 +210,70 @@
         return Math.round(mbps * 1000000);
     }
 
-    function deviceProfile(forceTranscode, maxMbps) {
+    /* `features` carries the two things the viewer can change in Settings:
+         surround  true (default) keeps up to 5.1 channels, false downmixes to
+                   stereo AAC whenever the server has to touch the audio;
+         hevc      true also claims HEVC for direct play (off by default, see
+                   the note on VIDEO_DIRECT below). */
+    function deviceProfile(forceTranscode, maxMbps, features) {
         var cap = bitrateCap(maxMbps);
+        var opts = features || {};
+        var surround = opts.surround !== false;
+        var hevc = opts.hevc === true;
+
+        /* Only codecs a 2017 Samsung actually decodes. Claiming more (DTS,
+           TrueHD, Opus, Vorbis, FLAC) makes the server hand over a stream
+           this TV then plays as silence or a black screen.
+           HEVC is absent unless the viewer turns it on: a UHD remux
+           direct-played here gave audio with a black picture, which looks like
+           a client bug. By default the server transcodes it to H.264, since a
+           1080p panel gains nothing from HEVC. */
+        var VIDEO_DIRECT = hevc ? 'h264,mpeg4,hevc,h265' : 'h264,mpeg4';
+        var TS_VIDEO_DIRECT = hevc ? 'h264,mpeg2video,hevc,h265' : 'h264,mpeg2video';
+        var AUDIO_DIRECT = 'aac,mp3,ac3,eac3';
+
+        var videoConditions = [
+            { Condition: 'LessThanEqual', Property: 'VideoLevel', Value: '41', IsRequired: false },
+            { Condition: 'LessThanEqual', Property: 'Width', Value: String(MAX_WIDTH), IsRequired: true },
+            { Condition: 'LessThanEqual', Property: 'Height', Value: String(MAX_HEIGHT), IsRequired: true },
+            { Condition: 'LessThanEqual', Property: 'VideoBitDepth', Value: '8', IsRequired: false }
+        ];
+
+        var codecProfiles = [
+            { Type: 'Video', Codec: 'h264', Conditions: videoConditions }
+        ];
+        if (hevc) {
+            /* HEVC levels are 30 x the spec number, so 4.1 is 123. */
+            codecProfiles.push({
+                Type: 'Video', Codec: 'hevc,h265',
+                Conditions: [
+                    { Condition: 'LessThanEqual', Property: 'VideoLevel', Value: '123', IsRequired: false },
+                    { Condition: 'LessThanEqual', Property: 'Width', Value: String(MAX_WIDTH), IsRequired: true },
+                    { Condition: 'LessThanEqual', Property: 'Height', Value: String(MAX_HEIGHT), IsRequired: true },
+                    { Condition: 'LessThanEqual', Property: 'VideoBitDepth', Value: '10', IsRequired: false }
+                ]
+            });
+        }
+        if (surround) {
+            /* AC3 tops out at 5.1 and so does what this TV hands to an ARC
+               receiver. A 7.1 E-AC3 or AAC track must be re-encoded rather
+               than direct played into a decoder that may drop it. */
+            codecProfiles.push({
+                Type: 'VideoAudio', Codec: AUDIO_DIRECT,
+                Conditions: [
+                    { Condition: 'LessThanEqual', Property: 'AudioChannels', Value: '6', IsRequired: true }
+                ]
+            });
+        }
+
         var profile = {
             Name: 'JellyLean (Samsung Tizen)',
             MaxStreamingBitrate: cap,
             MaxStaticBitrate: cap,
-            /* Only codecs a 2017 Samsung actually decodes. Claiming more (DTS,
-               TrueHD, Opus, Vorbis, FLAC) makes the server hand over a stream
-               this TV then plays as silence or a black screen.
-               HEVC is deliberately absent: a UHD remux direct-played here gives
-               audio with a black picture, which looks like a client bug. Let the
-               server transcode it to H.264 instead; a 1080p panel gains nothing
-               from HEVC. */
             DirectPlayProfiles: [
-                { Container: 'mp4,m4v,mov', Type: 'Video', VideoCodec: 'h264,mpeg4', AudioCodec: 'aac,mp3,ac3,eac3' },
-                { Container: 'mkv', Type: 'Video', VideoCodec: 'h264,mpeg4', AudioCodec: 'aac,mp3,ac3,eac3' },
-                { Container: 'ts,mpegts', Type: 'Video', VideoCodec: 'h264,mpeg2video', AudioCodec: 'aac,mp3,ac3,eac3' },
+                { Container: 'mp4,m4v,mov', Type: 'Video', VideoCodec: VIDEO_DIRECT, AudioCodec: AUDIO_DIRECT },
+                { Container: 'mkv', Type: 'Video', VideoCodec: VIDEO_DIRECT, AudioCodec: AUDIO_DIRECT },
+                { Container: 'ts,mpegts', Type: 'Video', VideoCodec: TS_VIDEO_DIRECT, AudioCodec: AUDIO_DIRECT },
                 { Container: 'mp3', Type: 'Audio', AudioCodec: 'mp3' },
                 { Container: 'aac', Type: 'Audio', AudioCodec: 'aac' },
                 { Container: 'flac', Type: 'Audio', AudioCodec: 'flac' },
@@ -234,26 +281,20 @@
             ],
             TranscodingProfiles: [
                 {
-                    /* ac3 first so a 5.1 source keeps its channels when only the
-                       video needs transcoding; aac is the fallback for DTS/TrueHD
-                       and anything the server cannot pass through as AC3. */
-                    Container: 'ts', Type: 'Video', VideoCodec: 'h264', AudioCodec: 'ac3,eac3,aac',
-                    Protocol: 'hls', Context: 'Streaming', MaxAudioChannels: '6',
+                    /* Surround lists ac3 first so a 5.1 source keeps its
+                       channels when only the video needs transcoding, and
+                       DTS/TrueHD become 5.1 AC3 instead of stereo AAC. AAC
+                       stays in the list as the fallback the server can
+                       always produce. Stereo mode asks for AAC alone. */
+                    Container: 'ts', Type: 'Video', VideoCodec: 'h264',
+                    AudioCodec: surround ? 'ac3,eac3,aac' : 'aac',
+                    Protocol: 'hls', Context: 'Streaming',
+                    MaxAudioChannels: surround ? '6' : '2',
                     MinSegments: 1, BreakOnNonKeyFrames: true
                 },
                 { Container: 'mp3', Type: 'Audio', AudioCodec: 'mp3', Protocol: 'http', Context: 'Streaming' }
             ],
-            CodecProfiles: [
-                {
-                    Type: 'Video', Codec: 'h264',
-                    Conditions: [
-                        { Condition: 'LessThanEqual', Property: 'VideoLevel', Value: '41', IsRequired: false },
-                        { Condition: 'LessThanEqual', Property: 'Width', Value: String(MAX_WIDTH), IsRequired: true },
-                        { Condition: 'LessThanEqual', Property: 'Height', Value: String(MAX_HEIGHT), IsRequired: true },
-                        { Condition: 'LessThanEqual', Property: 'VideoBitDepth', Value: '8', IsRequired: false }
-                    ]
-                }
-            ],
+            CodecProfiles: codecProfiles,
             ContainerProfiles: [],
             ResponseProfiles: [
                 { Type: 'Video', Container: 'm4v', MimeType: 'video/mp4' },
@@ -289,6 +330,9 @@
 
     var Api = {
         Error: ApiError,
+
+        /* Exposed so test/profile.js can pin what the TV claims to decode. */
+        deviceProfile: deviceProfile,
 
         /* The version in config.xml, so Settings and the media header cannot drift. */
         version: CLIENT_VERSION,
@@ -537,7 +581,10 @@
                 EnableDirectPlay: !forceTranscode,
                 EnableDirectStream: !forceTranscode,
                 EnableTranscoding: true,
-                DeviceProfile: deviceProfile(forceTranscode, opts.maxBitrate)
+                DeviceProfile: deviceProfile(forceTranscode, opts.maxBitrate, {
+                    surround: opts.surround,
+                    hevc: opts.hevc
+                })
             };
 
             /* Jellyfin only honours SubtitleStreamIndex when the source is
@@ -576,6 +623,8 @@
                     startTicks: opts.startTicks || 0,
                     forceTranscode: forceTranscode,
                     maxBitrate: opts.maxBitrate,
+                    surround: opts.surround,
+                    hevc: opts.hevc,
                     mediaSourceId: opts.mediaSourceId,
                     subtitleIndex: subtitleIndex,
                     audioIndex: audioIndex
@@ -839,6 +888,33 @@
             }
 
             return pathOrUrl.slice(0, split) + '?' + kept.join('&');
+        },
+
+        /* What the server decided to do with the audio and why, read from the
+           transcoding URL it handed back. Shown in the playback info panel so
+           "why is this transcoding?" can be answered from the couch. Returns
+           null for a URL that carries none of it (direct play). */
+        transcodeInfo: function (pathOrUrl) {
+            if (!pathOrUrl) return null;
+            var split = pathOrUrl.indexOf('?');
+            if (split === -1) return null;
+
+            var out = { audioCodec: '', audioChannels: 0, reasons: [] };
+            var parts = pathOrUrl.slice(split + 1).split('&');
+            for (var i = 0; i < parts.length; i++) {
+                var eq = parts[i].indexOf('=');
+                if (eq === -1) continue;
+                var key = parts[i].slice(0, eq).toLowerCase();
+                var value = parts[i].slice(eq + 1);
+                try { value = decodeURIComponent(value); } catch (e) { /* keep raw */ }
+                if (key === 'audiocodec') out.audioCodec = value.split(',')[0];
+                else if (key === 'transcodingmaxaudiochannels' || key === 'maxaudiochannels') {
+                    out.audioChannels = Number(value) || 0;
+                } else if (key === 'transcodereasons') {
+                    out.reasons = value ? value.split(',') : [];
+                }
+            }
+            return out;
         },
 
         absoluteUrl: function (pathOrUrl) {

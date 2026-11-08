@@ -339,6 +339,50 @@
         }
     };
 
+    /* The audio tracks AVPlay itself found in the stream, in container order,
+       as { index, language }. Null when this is not AVPlay or the TV gave no
+       track list at all. `trusted` is true only when the list also names a
+       video track, i.e. it is a real listing: an empty audio list inside it
+       means the TV found no audio it can decode. */
+    Player.getAudioTracks = function () {
+        if (state.mode !== 'avplay' || !av || typeof av.getTotalTrackInfo !== 'function') return null;
+
+        var info;
+        try { info = av.getTotalTrackInfo(); } catch (e) { return null; }
+        if (!info || !info.length) return null;
+
+        var tracks = [];
+        var sawVideo = false;
+        for (var i = 0; i < info.length; i++) {
+            var type = String(info[i].type || '').toUpperCase();
+            if (type === 'VIDEO') sawVideo = true;
+            if (type !== 'AUDIO') continue;
+
+            var language = '';
+            try {
+                var extra = typeof info[i].extra_info === 'string'
+                    ? JSON.parse(info[i].extra_info) : (info[i].extra_info || {});
+                language = extra.language || extra.track_lang || '';
+            } catch (e) { /* the field is free-form on some firmware */ }
+            tracks.push({ index: info[i].index, language: language });
+        }
+        return { tracks: tracks, trusted: sawVideo };
+    };
+
+    /* Switch the audio track of the stream that is open, without restarting
+       it. False when this engine cannot, so the caller can restart instead. */
+    Player.selectAudioTrack = function (avplayIndex) {
+        if (state.mode !== 'avplay' || !av || typeof av.setSelectTrack !== 'function') return false;
+        if (avplayIndex === undefined || avplayIndex === null || avplayIndex < 0) return false;
+        try {
+            av.setSelectTrack('AUDIO', avplayIndex);
+            return true;
+        } catch (e) {
+            console.warn('setSelectTrack failed', e);
+            return false;
+        }
+    };
+
     Player.getPosition = function () { return state.positionMs; };
     Player.getDuration = function () { return state.durationMs; };
     Player.isPaused = function () { return state.paused; };

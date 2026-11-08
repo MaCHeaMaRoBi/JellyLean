@@ -274,6 +274,49 @@
 
     App.lastPlayback = null;
 
+    /* Start in the viewer's language. Direct play always opens the container's
+       default track, so a different one has to be selected afterwards (AVPlay
+       can do that itself for tracks the TV decodes) or negotiated up front (a
+       transcode takes AudioStreamIndex). Nothing is done when the viewer picked
+       a track explicitly, has no preference, or the file lacks the language. */
+    function chooseStartAudio(item, opts, result, base) {
+        if (opts.audioIndex !== undefined && opts.audioIndex !== null) return result;
+        if (!result || !result.source || !global.AudioPrefs) return result;
+
+        var want = AudioPrefs.preferredStream(item, result.source);
+        if (!want) return result;
+
+        if (result.method === 'DirectPlay') {
+            if (Player.hasAvplay && AudioPrefs.directPlayable(want, base.surround)) {
+                result.audioIndex = want.Index;
+                result.audioInPlace = true;
+                return result;
+            }
+        } else {
+            var current = result.source.DefaultAudioStreamIndex;
+            var have = AudioPrefs.pick(result.source, current);
+            if (have && have.Index === want.Index) return result;
+        }
+
+        /* Needs the server: renegotiate for that track. The outcome replaces
+           the first one only when it actually came back. */
+        return Api.negotiate(item.Id, {
+            startTicks: base.startTicks,
+            forceTranscode: true,
+            maxBitrate: base.maxBitrate,
+            surround: base.surround,
+            hevc: base.hevc,
+            subtitleIndex: result.subtitleIndex,
+            audioIndex: want.Index,
+            mediaSourceId: result.source.Id
+        }).then(function (next) {
+            if (!next || !next.source) return result;
+            next.subtitleIndex = result.subtitleIndex;
+            next.audioIndex = want.Index;
+            return next;
+        }).catch(function () { return result; });
+    }
+
     App.playItem = function (item, options) {
         if (!item || !item.Id) return Promise.resolve();
 
@@ -308,10 +351,16 @@
            id and index. Text tracks need no second call. */
         var maxBitrate = Store.pref('maxBitrate', 0);
 
+        /* What the TV is told it can decode: Settings > Playback. */
+        var surround = Store.pref('audioOutput', 'surround') !== 'stereo';
+        var hevc = Store.pref('allowHevc', false) === true;
+
         return Api.negotiate(item.Id, {
             startTicks: startTicks,
             forceTranscode: forceTranscode,
             maxBitrate: maxBitrate,
+            surround: surround,
+            hevc: hevc,
             subtitleIndex: opts.subtitleIndex,
             audioIndex: opts.audioIndex,
             mediaSourceId: opts.mediaSourceId
@@ -337,6 +386,8 @@
                 startTicks: startTicks,
                 forceTranscode: true,
                 maxBitrate: maxBitrate,
+                surround: surround,
+                hevc: hevc,
                 subtitleIndex: image.Index,
                 audioIndex: opts.audioIndex,
                 mediaSourceId: result.source.Id
@@ -348,6 +399,13 @@
                 /* Keep the picture playing without the track rather than
                    refusing to start the item. The picker can try again. */
                 return result;
+            });
+        }).then(function (result) {
+            return chooseStartAudio(item, opts, result, {
+                startTicks: startTicks,
+                maxBitrate: maxBitrate,
+                surround: surround,
+                hevc: hevc
             });
         }).then(function (result) {
             if (!result || !result.source) {
@@ -368,7 +426,8 @@
                 playSessionId: result.playSessionId,
                 startMs: startMs,
                 subtitleIndex: result.subtitleIndex,
-                audioIndex: opts.audioIndex,
+                audioIndex: result.audioIndex !== undefined ? result.audioIndex : opts.audioIndex,
+                audioInPlace: !!result.audioInPlace,
                 retriedTranscode: !!opts.retriedTranscode
             });
             pendingItemId = null;

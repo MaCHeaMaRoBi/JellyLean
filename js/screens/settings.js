@@ -123,6 +123,41 @@
                 },
                 'transcode'
             ));
+            list.appendChild(choiceRow(
+                'Audio output',
+                'Surround keeps up to 5.1 channels and needs a soundbar or receiver on HDMI ARC or optical, with the TV set to pass sound through. Stereo has the server mix everything down to two channels.',
+                [
+                    { value: 'surround', label: 'Surround (5.1)' },
+                    { value: 'stereo', label: 'Stereo' }
+                ],
+                Store.pref('audioOutput', 'surround'),
+                function (value) {
+                    Store.setPref('audioOutput', value);
+                    U.toast('Takes effect on the next playback');
+                },
+                'audio'
+            ));
+            list.appendChild(choiceRow(
+                'Audio language',
+                'Start movies and episodes in this language when the file has it. A track you pick in the player is remembered for that movie or series.',
+                AudioPrefs.LANGUAGES,
+                AudioPrefs.canon(Store.pref('audioLanguage', '')),
+                function (value) {
+                    Store.setPref('audioLanguage', value);
+                    U.toast('Takes effect on the next playback');
+                },
+                'audio'
+            ));
+            list.appendChild(toggleRow(
+                'Allow HEVC direct play',
+                'Let the TV play H.265 files itself instead of the server converting them to H.264. If a movie shows sound with a black picture, turn this off.',
+                Store.pref('allowHevc', false) === true,
+                function (value) {
+                    Store.setPref('allowHevc', value);
+                    U.toast('Takes effect on the next playback');
+                },
+                'transcode'
+            ));
             list.appendChild(toggleRow(
                 'Autoplay next episode',
                 'When an episode ends, offer the next one with a 10 second countdown.',

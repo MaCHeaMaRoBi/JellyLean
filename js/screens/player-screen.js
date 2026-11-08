@@ -78,7 +78,7 @@
             session.infoOpen = false;
             if (els.infoPanel) els.infoPanel.classList.add('hidden');
         }
-        closeAudio(false);
+        PlayerAudio.close(false);
         closeSubtitles(false);
         session.fading = false;
 
@@ -147,7 +147,7 @@
         { id: 'rewind', icon: 'rewind', label: 'Rewind 10 seconds', run: function () { seekBy(-SEEK_STEP_MS); } },
         { id: 'play', icon: 'play', label: 'Play or pause', run: togglePlay },
         { id: 'forward', icon: 'forward', label: 'Forward 10 seconds', run: function () { seekBy(SEEK_STEP_MS); } },
-        { id: 'audio', icon: 'audio', label: 'Audio track', run: toggleAudio },
+        { id: 'audio', icon: 'audio', label: 'Audio track', run: PlayerAudio.toggle },
         { id: 'subtitles', icon: 'captions', label: 'Subtitles', run: toggleSubtitles },
         { id: 'info', icon: 'info', label: 'Playback information', run: toggleInfo }
     ];
@@ -229,6 +229,11 @@
         rows.appendChild(row);
     }
 
+    /* Jellyfin's TranscodeReasons are CamelCase identifiers. */
+    function transcodeReason(code) {
+        return String(code).replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase();
+    }
+
     function paintInfo() {
         if (!els || !els.infoPanel || !session) return;
 
@@ -245,7 +250,7 @@
             if (streams[i].Type === 'Subtitle') subtitleCount++;
         }
 
-        var audio = session.audioStream || pickAudioStream(source);
+        var audio = session.audioStream || AudioPrefs.pick(source);
 
         var title = item.Name || 'Playback';
         if (item.Type === 'Episode' && item.SeriesName) {
@@ -277,6 +282,19 @@
             if (audio.Channels) audioLabel += '  \u00b7  ' + audio.Channels + ' ch';
             if (audio.Language) audioLabel += '  \u00b7  ' + String(audio.Language).toUpperCase();
             infoRow(rows, 'Audio', audioLabel);
+        }
+
+        if (session.playMethod === 'Transcode') {
+            /* What the server decided and why, from its own transcoding URL. */
+            var plan = Api.transcodeInfo(source.TranscodingUrl);
+            if (plan && plan.audioCodec) {
+                var outLabel = plan.audioCodec.toUpperCase();
+                if (plan.audioChannels) outLabel += '  \u00b7  up to ' + plan.audioChannels + ' ch';
+                infoRow(rows, 'Audio output', outLabel);
+            }
+            if (plan && plan.reasons.length) {
+                infoRow(rows, 'Transcoding because', plan.reasons.map(transcodeReason).join(', '));
+            }
         }
 
         var subtitleValue;
@@ -317,7 +335,7 @@
     function toggleInfo() {
         if (!session || !els.infoPanel) return;
 
-        if (!session.infoOpen && session.audioOpen) closeAudio(false);
+        if (!session.infoOpen && session.audioOpen) PlayerAudio.close(false);
         if (!session.infoOpen && session.subtitleOpen) closeSubtitles(false);
 
         session.infoOpen = !session.infoOpen;
@@ -670,7 +688,7 @@
        "SupportsDirectPlay" for a stream this TV then refuses to decode. Rather
        than showing a black screen, reopen the same position through the
        server's HLS transcoder once. */
-    function retryWithTranscode(reason) {
+    function retryWithTranscode(reason, message) {
         if (!session || session.stopping) return;
         if (session.playMethod === 'Transcode' || session.retriedTranscode) {
             failPlayback(reason);
@@ -682,7 +700,7 @@
 
         session.stopping = true;
         teardown();
-        U.toast('Direct play failed, switching to server transcoding\u2026');
+        U.toast(message || 'Direct play failed, switching to server transcoding\u2026');
         App.playItem(item, {
             startMs: resume,
             forceTranscode: true,
@@ -1000,182 +1018,32 @@
 
     /* --------------------------------------------------------- audio picker */
 
-    /* A remux can carry a TrueHD track the TV cannot decode plus an AC3
-       alternate. Direct play always takes the container default, so switching
-       audio means asking the server for a fresh transcode with the chosen
-       index, exactly like an image subtitle. */
-    function pickAudioStream(source, index) {
-        var streams = (source && source.MediaStreams) || [];
-        var chosen = null;
-        var first = null;
-        var markedDefault = null;
+    /* The list itself lives in js/screens/player-audio.js and the helpers in
+       js/audio.js. What stays here is what needs the session: switching the
+       track, either in place on AVPlay or by asking the server for a stream. */
 
-        for (var i = 0; i < streams.length; i++) {
-            if (streams[i].Type !== 'Audio') continue;
-            if (index !== undefined && index !== null && index >= 0 &&
-                    Number(streams[i].Index) === Number(index)) {
-                chosen = streams[i];
-            }
-            if (!first) first = streams[i];
-            if (streams[i].IsDefault && !markedDefault) markedDefault = streams[i];
-        }
-        return chosen || markedDefault || first || null;
+    function surroundOn() {
+        return Store.pref('audioOutput', 'surround') !== 'stereo';
     }
 
-    function audioStreams() {
-        var streams = (session && session.source && session.source.MediaStreams) || [];
-        var list = [];
-        for (var i = 0; i < streams.length; i++) {
-            if (streams[i].Type === 'Audio') list.push(streams[i]);
-        }
-        return list;
-    }
+    /* Switch to `stream` on the stream that is already open. Possible only on
+       a direct play, where AVPlay itself decodes the file: the track must be
+       one the TV can decode, and AVPlay's own track list must line up with the
+       file's (AudioPrefs.avplayIndex). Anything else returns false and the
+       caller restarts through the server. */
+    function switchAudioInPlace(stream) {
+        if (!session || session.playMethod !== 'DirectPlay' || !Player.hasAvplay) return false;
+        if (!AudioPrefs.directPlayable(stream, surroundOn())) return false;
 
-    function audioTrackName(stream) {
-        if (!stream) return 'Default';
-        if (stream.Language && global.Subtitles) {
-            var language = Subtitles.languageName(stream.Language);
-            if (language) return language;
-        }
-        return stream.Title || stream.DisplayTitle || ('Track ' + (stream.Index + 1));
-    }
+        var info = Player.getAudioTracks();
+        if (!info || !info.tracks.length) return false;
 
-    function audioCodecName(codec) {
-        var map = {
-            truehd: 'TrueHD', ac3: 'AC3', eac3: 'E-AC3', dts: 'DTS', dtshd: 'DTS-HD',
-            aac: 'AAC', mp3: 'MP3', flac: 'FLAC', opus: 'Opus', vorbis: 'Vorbis'
-        };
-        if (!codec) return '';
-        return map[String(codec).toLowerCase()] || String(codec).toUpperCase();
-    }
+        var target = AudioPrefs.avplayIndex(session.source, stream, info.tracks);
+        if (target < 0 || !Player.selectAudioTrack(target)) return false;
 
-    function audioMeta(stream) {
-        var bits = [];
-        if (stream.Title) bits.push(String(stream.Title));
-        if (stream.IsDefault) bits.push('Default');
-        var codec = audioCodecName(stream.Codec);
-        if (codec) bits.push(codec);
-        if (stream.Channels) bits.push(stream.Channels + ' ch');
-        if (stream.BitRate) bits.push(Math.round(stream.BitRate / 1000) + ' kbps');
-        return bits.join('  \u00b7  ');
-    }
-
-    function addAudioRow(stream, active) {
-        var row = U.el('div', 'sub-row');
-        row.setAttribute('data-focusable', '');
-        row.setAttribute('role', 'option');
-        row.setAttribute('aria-selected', active ? 'true' : 'false');
-        row.tabIndex = -1;
-
-        var check = U.el('span', 'sub-check');
-        if (active) check.appendChild(global.Icons.el('check', 26));
-        row.appendChild(check);
-
-        var main = U.el('span', 'sub-main');
-        main.appendChild(U.el('span', 'sub-name', audioTrackName(stream)));
-        main.appendChild(U.el('span', 'sub-meta', audioMeta(stream)));
-        row.appendChild(main);
-
-        if (active) row.classList.add('selected');
-        row.setAttribute('aria-label', audioTrackName(stream) + ' audio, ' +
-            audioMeta(stream).replace(/\s+\u00b7\s+/g, ', '));
-
-        row.onclick = function (event) {
-            if (event && event.preventDefault) event.preventDefault();
-            chooseAudio(stream);
-        };
-
-        els.audioList.appendChild(row);
-        return row;
-    }
-
-    function buildAudioList() {
-        if (!session || !els.audioList) return;
-
-        U.clear(els.audioList);
-        session.audioRows = [];
-
-        var streams = audioStreams();
-        var active = session.audioStream ? session.audioStream.Index : -1;
-
-        if (!streams.length) {
-            els.audioList.appendChild(U.el('div', 'sub-row', 'No audio tracks reported'));
-            return;
-        }
-
-        for (var i = 0; i < streams.length; i++) {
-            session.audioRows.push(addAudioRow(streams[i], streams[i].Index === active));
-        }
-    }
-
-    function audioFocusIndex() {
-        if (!session || !session.audioRows) return -1;
-        var active = document.activeElement;
-        for (var i = 0; i < session.audioRows.length; i++) {
-            if (session.audioRows[i] === active) return i;
-        }
-        return -1;
-    }
-
-    function ensureAudioVisible(row) {
-        if (!els || !els.audioList || !row) return;
-
-        var listBox = els.audioList.getBoundingClientRect();
-        var rowBox = row.getBoundingClientRect();
-
-        if (rowBox.top < listBox.top) {
-            els.audioList.scrollTop -= (listBox.top - rowBox.top) + 8;
-        } else if (rowBox.bottom > listBox.bottom) {
-            els.audioList.scrollTop += (rowBox.bottom - listBox.bottom) + 8;
-        }
-    }
-
-    function focusAudioRow(index) {
-        if (!session || !session.audioRows || !session.audioRows.length) return;
-        var next = U.clamp(index, 0, session.audioRows.length - 1);
-        session.audioRows[next].focus();
-        ensureAudioVisible(session.audioRows[next]);
-    }
-
-    function moveAudioFocus(delta) {
-        var index = audioFocusIndex();
-        if (index < 0) index = 0;
-        focusAudioRow(index + delta);
-    }
-
-    function openAudio() {
-        if (!session || !els.audioPanel) return;
-
-        if (session.infoOpen) toggleInfo();
-        if (session.subtitleOpen) closeSubtitles(false);
-
-        session.audioOpen = true;
-        els.audioPanel.classList.remove('hidden');
-        buildAudioList();
-        showOsd();
-
-        var active = -1;
-        for (var i = 0; i < session.audioRows.length; i++) {
-            if (session.audioRows[i].classList.contains('selected')) { active = i; break; }
-        }
-        focusAudioRow(active < 0 ? 0 : active);
-    }
-
-    function closeAudio(restoreFocus) {
-        if (!session || !session.audioOpen) return false;
-
-        session.audioOpen = false;
-        if (els && els.audioPanel) els.audioPanel.classList.add('hidden');
-
-        if (restoreFocus !== false && els && els.audioBtn) els.audioBtn.focus();
-        showOsd();
+        session.audioStream = stream;
+        if (session.infoOpen) paintInfo();
         return true;
-    }
-
-    function toggleAudio() {
-        if (!session) return;
-        if (session.audioOpen) closeAudio(true);
-        else openAudio();
     }
 
     function restartWithAudio(stream) {
@@ -1190,7 +1058,7 @@
         current.stopping = true;
         teardown();
 
-        U.toast('Switching audio to ' + audioTrackName(stream) + '\u2026');
+        U.toast('Switching audio to ' + PlayerAudio.trackName(stream) + '\u2026');
 
         App.playItem(item, {
             startMs: position,
@@ -1206,12 +1074,51 @@
         if (!session || !stream) return;
 
         if (session.audioStream && session.audioStream.Index === stream.Index) {
-            closeAudio(true);
+            PlayerAudio.close(true);
             return;
         }
 
-        closeAudio(false);
+        /* Remember the language for this movie or series, whichever way the
+           switch happens, so the next episode starts in it. */
+        AudioPrefs.saveChoice(session.item, stream);
+
+        if (switchAudioInPlace(stream)) {
+            PlayerAudio.close(true);
+            U.toast('Audio: ' + PlayerAudio.trackName(stream));
+            return;
+        }
+
+        PlayerAudio.close(false);
         restartWithAudio(stream);
+    }
+
+    /* App picked a remembered or preferred language that the TV can switch to
+       by itself, so it left the stream on the container's default and asked us
+       to select the track once AVPlay is ready. If AVPlay's track list does not
+       line up, fall back to the same restart the picker uses. */
+    function applyPreferredAudio() {
+        if (!session || !session.audioInPlace) return;
+        session.audioInPlace = false;
+
+        var stream = session.audioStream;
+        if (!stream || switchAudioInPlace(stream)) return;
+        restartWithAudio(stream);
+    }
+
+    /* AVPlay drops an audio track it cannot decode without any error, which
+       is how a file direct-plays with picture and no sound. The track list it
+       reports is the only evidence, so when the file has audio and AVPlay lists
+       none, reopen through the server's transcoder. Skipped whenever the list
+       is missing or not a real listing, so a quirk cannot cause a restart. */
+    function checkAudioDecoded() {
+        if (!session || session.stopping || session.playMethod !== 'DirectPlay') return;
+        if (session.retriedTranscode || !Player.hasAvplay) return;
+        if (!AudioPrefs.streams(session.source).length) return;
+
+        var info = Player.getAudioTracks();
+        if (!info || !info.trusted || info.tracks.length) return;
+
+        retryWithTranscode('the TV found no audio it can decode', 'No sound from direct play, switching to server transcoding\u2026');
     }
 
     /* ------------------------------------------------------------- remote */
@@ -1259,7 +1166,7 @@
             event.preventDefault();
             event.stopPropagation();
             /* BACK closes the pickers, then the info panel, then playback. */
-            if (!closeAudio(true) && !closeSubtitles(true) && !closeInfo()) finish(true);
+            if (!PlayerAudio.close(true) && !closeSubtitles(true) && !closeInfo()) finish(true);
             return;
         }
 
@@ -1281,12 +1188,9 @@
         /* While either picker is open it owns UP/DOWN/OK; everything else
            would move playback out from under the list. */
         if (session.audioOpen) {
-            if (code === KEY.UP) moveAudioFocus(-1);
-            else if (code === KEY.DOWN) moveAudioFocus(1);
-            else if (code === KEY.ENTER) {
-                var audioRow = session.audioRows[audioFocusIndex()];
-                if (audioRow) audioRow.click();
-            }
+            if (code === KEY.UP) PlayerAudio.moveFocus(-1);
+            else if (code === KEY.DOWN) PlayerAudio.moveFocus(1);
+            else if (code === KEY.ENTER) PlayerAudio.activate();
             showOsd();
             return;
         }
@@ -1381,6 +1285,7 @@
         if (current.flashTimer) clearTimeout(current.flashTimer);
         if (current.endTimer) clearTimeout(current.endTimer);
         if (current.progressTimer) clearInterval(current.progressTimer);
+        if (current.audioCheckTimer) clearTimeout(current.audioCheckTimer);
 
         document.removeEventListener('keydown', onKeyDown, true);
 
@@ -1421,6 +1326,14 @@
                 session.durationMs = Player.getDuration();
                 paintProgress(Player.getPosition(), session.durationMs);
                 setState(Player.isPaused() ? 'Ready' : 'Playing');
+
+                /* Pick the remembered language before the first sample, then
+                   look a little later for a track the TV dropped. */
+                applyPreferredAudio();
+                if (session && !session.stopping) {
+                    if (session.audioCheckTimer) clearTimeout(session.audioCheckTimer);
+                    session.audioCheckTimer = setTimeout(checkAudioDecoded, 2500);
+                }
             },
 
             timeupdate: function (positionMs, durationMs) {
@@ -1471,6 +1384,15 @@
         return handlers;
     }
 
+    PlayerAudio.attach({
+        session: function () { return session; },
+        els: function () { return els; },
+        showOsd: showOsd,
+        toggleInfo: toggleInfo,
+        closeSubtitles: closeSubtitles,
+        choose: chooseAudio
+    });
+
     /* -------------------------------------------------------------- public */
 
     window.Screens.player = {
@@ -1517,7 +1439,9 @@
             session = {
                 item: item,
                 source: params.source || null,
-                audioStream: pickAudioStream(params.source, params.audioIndex),
+                audioStream: AudioPrefs.pick(params.source, params.audioIndex),
+                audioInPlace: !!params.audioInPlace,
+                audioCheckTimer: null,
                 url: params.url,
                 playMethod: params.playMethod || 'DirectPlay',
                 retriedTranscode: !!params.retriedTranscode,
