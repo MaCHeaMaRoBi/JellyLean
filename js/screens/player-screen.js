@@ -549,6 +549,15 @@
             App.exitApp();
             return;
         }
+        /* The app-level handler ignores keys while the player is mounted, so
+           OK has to be delivered here or the Up Next buttons are dead. */
+        if (code === KEY.ENTER) {
+            event.preventDefault();
+            event.stopPropagation();
+            var node = document.activeElement;
+            if (node && typeof node.click === 'function') node.click();
+            return;
+        }
         if (code === KEY.LEFT || code === KEY.RIGHT || code === KEY.UP || code === KEY.DOWN) {
             event.preventDefault();
             event.stopPropagation();
@@ -1587,8 +1596,12 @@
 
             attachSubtitles(session);
 
+            var mine = session;
+
             function openStream() {
-                if (!session || session.stopping) return;
+                /* A warm-up can outlive the session it was started for; never
+                   open the current session's stream from an old callback. */
+                if (!session || session !== mine || session.stopping) return;
                 Player.open({
                     url: session.url,
                     startMs: session.startMs,

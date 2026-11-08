@@ -4,6 +4,9 @@
 
     window.Screens = window.Screens || {};
 
+    /* Sign Out is two presses: one stray OK must not wipe the session. */
+    var signOutTimer = null;
+
     /* The TV gives us no logs, so the last negotiated stream is the only way to
        tell "the server sent 1440p" from "the TV refused to decode it". */
     function lastPlaybackLine() {
@@ -249,15 +252,31 @@
                 });
             };
             var signOut = UI.button({
-                label: 'Sign Out', icon: 'logout', key: 'set-signout',
-                onClick: function () { App.logout(); }
+                label: 'Sign Out', icon: 'logout', key: 'set-signout'
             });
+            signOut.onclick = function () {
+                if (signOutTimer) {
+                    clearTimeout(signOutTimer);
+                    signOutTimer = null;
+                    App.logout();
+                    return;
+                }
+                UI.iconize(signOut, 'logout', 'Press OK again');
+                signOut.setAttribute('aria-label', 'Press OK again to sign out');
+                signOutTimer = setTimeout(function () {
+                    signOutTimer = null;
+                    UI.iconize(signOut, 'logout', 'Sign Out');
+                    signOut.setAttribute('aria-label', 'Sign Out');
+                }, 4000);
+            };
             page.appendChild(UI.buttonRow([checkBtn, signOut], { className: 'pad' }));
             page.appendChild(U.el('div', 'shelf-end'));
 
             U.focusFirst(container);
         },
 
-        destroy: function () {}
+        destroy: function () {
+            if (signOutTimer) { clearTimeout(signOutTimer); signOutTimer = null; }
+        }
     };
 })(window);

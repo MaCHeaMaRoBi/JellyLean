@@ -95,7 +95,9 @@ function wait(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
     server.state = 'Paused'; server.position = 12000;
     socket.onMessage({ MessageType: 'SyncPlayGroupUpdate', Data: { Type: 'StateUpdate', Data: { State: 'Paused', Reason: 'Pause' } } });
     command('Pause', 12000);
-    await wait(800);
+    /* Wait out the Pause quiet window so the Unpause rebuffer test below is
+       not masked by it. */
+    await wait(2600);
     var afterPause = { ready: requests.ready, buffering: requests.buffering };
 
     /* ... and resumes. */
@@ -109,6 +111,14 @@ function wait(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
     console.log('after resume: ready=' + requests.ready + ' buffering=' + requests.buffering);
     console.log('TV ends ' + (paused ? 'PAUSED' : 'playing') + ' at ' + pos + ' ms');
     var loopFree = total === 0 && !paused;
+
+    /* AVPlay rebuffers when HLS resumes. That stall must stay inside the quiet
+       window too, or the group is told "Waiting" and re-sends the Unpause. */
+    var bResume = requests.buffering;
+    SyncPlay.onBuffering(true);
+    SyncPlay.onBuffering(false);
+    var resumeRebufferQuiet = requests.buffering === bResume;
+    console.log('Rebuffer right after resume reported: ' + !resumeRebufferQuiet);
 
     /* The fix must not silence legitimate reports. A Seek command puts the
        group in Waiting and the TV has to acknowledge it with Ready ... */
@@ -162,7 +172,19 @@ function wait(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
     console.log('Real 2.5 s desync: seeks=' + sim.seeks + ' (want 1), residual ' +
         Math.round(simTrue() - Player.getPosition()) + ' ms');
 
-    var ok = loopFree && seekAcked && stallReported && steady && corrected;
+    /* Leaving the group must cancel a command already waiting for its When. */
+    paused = false;
+    socket.onMessage({ MessageType: 'SyncPlayCommand', Data: {
+        Command: 'Pause', PositionTicks: String(50000 * 10000),
+        When: new Date(Date.now() + 1500).toISOString(), EmittedAt: now()
+    } });
+    SyncPlay.disconnect();
+    await wait(2200);
+    var disconnectClear = paused === false;
+    console.log('Scheduled command cancelled on disconnect: ' + disconnectClear);
+
+    var ok = loopFree && resumeRebufferQuiet && seekAcked && stallReported &&
+        steady && corrected && disconnectClear;
     console.log(ok ? 'PASS' : 'FAIL');
     process.exit(ok ? 0 : 1);
 })();

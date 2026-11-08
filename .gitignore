@@ -12,6 +12,10 @@ skills-lock.json
 
 # Graphify knowledge graph (generated; rebuild with: graphify extract . --code-only)
 graphify-out/
+
+# ruflo MCP runtime state (vector memory + policy ledger, per machine)
+.swarm/
+.claude-flow/
 # Playwright CLI output (may contain credentials)
 .playwright-cli/
 

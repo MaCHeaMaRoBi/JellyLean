@@ -307,10 +307,10 @@ the wrong profile. Rebuild with a Samsung author certificate and
 IP was not entered on the TV, or they are on different subnets. Reboot the TV after
 changing developer mode.
 
-**Audio but no picture** — check **Settings → Last playback** and confirm the
-transcode URL carries `maxWidth=1920&maxHeight=1080`; enable **Settings → Force
-transcoding**; and make sure the built `index.html` still loads
-`$WEBAPIS/webapis/webapis.js`, otherwise AVPlay is skipped.
+**Audio but no picture** — check **Settings → Server & Device** for the last
+negotiated stream, enable **Settings → Force transcoding**, and make sure the
+built `index.html` still loads `$WEBAPIS/webapis/webapis.js`, otherwise AVPlay
+is skipped.
 
 **Skip Intro never appears** — needs Jellyfin 10.10+ Media Segments, or the Intro
 Skipper plugin on 10.8/10.9, and analysed episodes.

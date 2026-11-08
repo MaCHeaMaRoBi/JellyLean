@@ -11,6 +11,22 @@ Rules:
 - Read `graphify-out/GRAPH_REPORT.md` only for broad architecture review when query/path/explain isn’t enough.
 - After modifying code or docs, run `graphify update .`.
 
+## ruflo (OpenCode MCP)
+
+Installed globally (`npm i -g ruflo`) and registered in `~/.config/opencode/opencode.json` as a local MCP server:
+
+```json
+"ruflo": { "type": "local", "command": ["ruflo", "mcp", "start", "--tools", "memory,swarm,agent,task"] }
+```
+
+- Use the `ruflo_*` MCP tools directly (e.g. `memory_store` / `memory_search`) — no shell call needed.
+- Its 81 agent definitions are converted to OpenCode subagents in `~/.config/opencode/agent/` (`planner`, `backend-dev`, `security-architect`, `swarm-pr`, …). `opencode debug agents` lists them; check there before adding a new agent.
+- Its 22 skills are in `~/.config/opencode/skills/` (`swarm-orchestration`, `agentdb-*`, `github-*`, `pair-programming`, `verification-quality`, …).
+- Prompts were remapped: `mcp__claude-flow__x` → `ruflo_x`, `npx claude-flow@v3alpha` → `ruflo`. Commands that never existed (`ruflo github`, `ruflo actions`, `ruflo ddd`, `ruflo integration`) are marked as sketches in the files that use them.
+- Vector memory is per project in `.swarm/` (gitignored). Keep project facts in namespace `jellylean`.
+- The full server advertises 386 tools (~75k schema tokens). Keep `--tools` curated; add selectors there only when a group is actually needed.
+- `ruflo doctor` for health, `ruflo mcp tools` to list what is exposed.
+
 ## Tizen / widget build & install (avoid guessing)
 
 - Build:

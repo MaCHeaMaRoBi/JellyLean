@@ -100,7 +100,10 @@
         var stage = Stage(shell, container);
         var lastTarget = null;
 
-        container.addEventListener('focus', function (event) {
+        /* Re-rendering (Retry) replaces the handler on the same screen; bound
+           to the screen, not #app, so leaving Home removes it. */
+        if (shell.focusHandler) shell.screen.removeEventListener('focus', shell.focusHandler, true);
+        shell.focusHandler = function (event) {
             var node = event.target;
             if (!node || !node.getAttribute) return;
             if (node.getAttribute('data-focusable') === null) return;
@@ -111,7 +114,8 @@
                 U.setTranslate(scroll, 0, 0);
                 stage.returnToFeatured();
             }
-        }, true);
+        };
+        shell.screen.addEventListener('focus', shell.focusHandler, true);
 
         Promise.all([
             UI.views(),

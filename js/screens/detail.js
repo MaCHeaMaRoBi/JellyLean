@@ -197,6 +197,10 @@
                 if (spec.after) spec.after(next);
                 paint();
                 U.toast(next ? spec.toastOn : spec.toastOff);
+            }, function () {
+                /* The server rejected it: leave the state and label as they
+                   were rather than claiming a change that will not survive. */
+                U.toast('Could not update');
             });
         };
         return btn;

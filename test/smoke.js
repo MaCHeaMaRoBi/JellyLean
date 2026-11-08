@@ -701,8 +701,12 @@ async function main() {
             /Playing in \d+ seconds/.test(await evaluate("(document.querySelector('#upNextOverlay .upnext-count') || {}).textContent || ''")));
         await capture('06c-upnext');
 
-        await evaluate("Array.prototype.filter.call(document.querySelectorAll('#upNextOverlay .btn')," +
-            " function (b) { return b.textContent === 'Play Now'; })[0].click(); true");
+        check('Up Next focuses Play Now',
+            /Play Now/.test(await evaluate("(document.activeElement || {}).textContent || ''")),
+            await evaluate("(document.activeElement || {}).textContent || ''"));
+        /* OK on the remote, not a synthetic .click(): the player swallows the
+           app-level handler, so ENTER has to be wired here explicitly. */
+        await press('Enter', 13);
         await waitFor("window.Player && Player.getItem() && Player.getItem().Id === 'ep2'",
             'up next playback', 30000);
         check('Play Now opens the next episode', true);
@@ -1003,6 +1007,21 @@ async function main() {
             limited[2] === 'http://h/v?VideoBitrate=99&maxWidth=1920&maxHeight=1080',
             JSON.stringify(limited));
 
+        /* The token is appended to the stream URL, so a server-supplied
+           absolute URL must not be allowed to point at another host. */
+        var absolute = await evaluate("(function () {" +
+            "  var base = Api.base.replace(/\\/$/, '');" +
+            "  return {" +
+            "    foreign: Api.absoluteUrl('https://evil.example/x.m3u8')," +
+            "    same: Api.absoluteUrl(base + '/x.m3u8')," +
+            "    base: base" +
+            "  };" +
+            "})()");
+        check('a foreign absolute stream URL is rebased onto the server',
+            absolute.foreign.indexOf('evil.example') === -1 &&
+            absolute.foreign === absolute.base + '/x.m3u8', absolute.foreign);
+        check('a same-server absolute URL is kept', absolute.same === absolute.base + '/x.m3u8');
+
         var qualityRow = await evaluate("Array.prototype.some.call(document.querySelectorAll('.list-title')," +
             " function (n) { return n.textContent === 'Transcode quality'; })");
         check('no transcode bitrate setting', qualityRow === false);
@@ -1013,12 +1032,15 @@ async function main() {
         /* A dead token anywhere must return to setup instead of leaving every
            screen stuck on "HTTP 401". Done last because it signs the app out. */
         expect401 = true;
+        await evaluate("Store.setPref('seerrKey', 'secret'); Store.setPref('seerrMode', 'key'); true");
         await evaluate("Api.configure({ serverUrl: App && Store.auth().serverUrl," +
             " token: 'expired-token', userId: Store.auth().userId," +
             " deviceId: Store.deviceId() }); Api.views().catch(function () {}); true");
         await waitFor("!!document.querySelector('#serverUrl')", 'setup after a 401');
         check('a 401 clears the session and returns to setup', true);
         check('the dead token is not kept', await evaluate("!Store.isLoggedIn()"));
+        check('a 401 also forgets the Seerr connection',
+            await evaluate("!Store.pref('seerrKey') && !Store.pref('seerrMode')"));
 
         await sleep(300);
 

@@ -379,11 +379,13 @@
         switch (command.Command) {
             case 'Unpause':
                 run(function () {
+                    /* Never report a rebuffer caused by resuming: the server
+                       would answer it with another Unpause. */
+                    quiet(2500);
                     /* A late command means the group has moved on since `When`. */
                     var late = Math.max(0, Date.now() - whenLocal);
                     var target = positionMs + late;
                     if (Math.abs(Player.getPosition() - target) > 400) {
-                        quiet(2500);
                         Player.seekTo(target);
                     }
                     Player.resume();
@@ -393,9 +395,9 @@
 
             case 'Pause':
                 run(function () {
+                    quiet(2500);
                     Player.pause();
                     if (Math.abs(Player.getPosition() - positionMs) > 400) {
-                        quiet(2500);
                         Player.seekTo(positionMs);
                     }
                 });
@@ -466,6 +468,7 @@
 
     SyncPlay.disconnect = function () {
         if (socket) { socket.close(); socket = null; }
+        clearCommandTimer();
         stopTimeSync();
         state.enabled = false;
         state.group = null;

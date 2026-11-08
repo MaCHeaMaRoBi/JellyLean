@@ -35,6 +35,7 @@
             var startIndex = 0;
             var total = 0;
             var loading = false;
+            var loadToken = 0;
             var pending = [];
 
             /* The first visit uses the caller's sort, then remembers whatever
@@ -109,6 +110,11 @@
 
             function reset() {
                 persistSort();
+                /* Invalidate the page still in flight and clear the guard it
+                   set, otherwise the new sort never loads and the old order
+                   gets appended to the new one. */
+                loadToken++;
+                loading = false;
                 startIndex = 0;
                 total = 0;
                 pending = [];
@@ -122,6 +128,7 @@
             function loadMore(refocus) {
                 if (loading) return;
                 loading = true;
+                var mine = ++loadToken;
 
                 Api.items({
                     parentId: parentId,
@@ -131,6 +138,7 @@
                     sortOrder: sortOrder,
                     recursive: params.recursive === true
                 }).then(function (result) {
+                    if (mine !== loadToken) return;
                     var items = (result && result.Items) || [];
                     total = result ? result.TotalRecordCount : items.length;
                     startIndex += items.length;
@@ -155,6 +163,7 @@
                         if (!onSort) U.focusFirst(container);
                     }
                 }).catch(function (err) {
+                    if (mine !== loadToken) return;
                     loading = false;
                     U.clear(footer);
                     footer.appendChild(UI.empty('Could not load items: ' + (err.message || 'unknown')));
@@ -165,8 +174,9 @@
                 });
             }
 
-            /* Page in more as focus nears the last drawn line. */
-            container.addEventListener('focus', function (event) {
+            /* Page in more as focus nears the last drawn line. Bound to the
+               screen, not #app, so it dies when the screen does. */
+            shell.screen.addEventListener('focus', function (event) {
                 var node = event.target;
                 if (loading || startIndex >= total || !node || !node._item) return;
                 var lines = grid.children;

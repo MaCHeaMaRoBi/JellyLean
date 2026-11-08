@@ -98,6 +98,11 @@
             delete data.userId;
             delete data.userName;
             delete data.serverId;
+            /* A Seerr connection belongs to the account that signed in. */
+            if (data.prefs) {
+                delete data.prefs.seerrKey;
+                delete data.prefs.seerrMode;
+            }
             save();
         },
 

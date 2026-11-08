@@ -375,6 +375,10 @@
         }).catch(function (err) {
             pendingItemId = null;
             U.toast('Could not start playback: ' + (err && err.message ? err.message : 'unknown error'));
+            /* A failed restart happens after the player has torn itself down,
+               so the remote would be dead on a blank screen. Return to the
+               screen that asked for playback. */
+            if (mounted && mounted.name === 'player') App.back();
         });
     };
 
@@ -441,6 +445,9 @@
     App.logout = function () {
         SyncPlay.disconnect();
         UI.resetViews();
+        /* Revoke the Seerr session before the Jellyfin token is gone; the
+           local Seerr key is cleared with the rest of the auth state. */
+        if (global.Seerr) Seerr.disconnect();
         Api.logout();
         Store.clearAuth();
         stack = [];

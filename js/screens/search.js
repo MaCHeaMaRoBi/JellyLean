@@ -90,7 +90,7 @@
                 return UI.shelf('Discover', items.map(remoteCard), { key: 'sr-discover' });
             }
 
-            function render(library, discovered, query) {
+            function render(library, discovered, query, failed) {
                 U.clear(results);
 
                 var blocks = librarySections(library || []);
@@ -102,7 +102,15 @@
                 U.lazy.check();
 
                 if (!any) {
-                    results.appendChild(UI.empty('Nothing found for \u201c' + query + '\u201d.'));
+                    if (failed) {
+                        results.appendChild(UI.empty('Could not search. Check the connection.'));
+                        results.appendChild(UI.buttonRow([UI.button({
+                            label: 'Retry', icon: 'refresh', primary: true,
+                            onClick: function () { run(true); }
+                        })], { className: 'pad' }));
+                    } else {
+                        results.appendChild(UI.empty('Nothing found for \u201c' + query + '\u201d.'));
+                    }
                 }
 
                 var total = (library ? library.length : 0) + (discovered ? discovered.length : 0);
@@ -131,6 +139,7 @@
 
                 var current = ++token;
                 status.textContent = 'Searching\u2026';
+                var failed = false;
 
                 var libraryPromise = Api.items({
                     searchTerm: query,
@@ -140,7 +149,10 @@
                     sortOrder: 'Ascending'
                 }).then(function (result) {
                     return (result && result.Items) || [];
-                }).catch(function () { return []; });
+                }).catch(function () {
+                    failed = true;
+                    return [];
+                });
 
                 var discoverPromise = (seerrReady && global.Seerr)
                     ? Seerr.search(query).catch(function () { return []; })
@@ -148,7 +160,7 @@
 
                 Promise.all([libraryPromise, discoverPromise]).then(function (parts) {
                     if (current !== token) return;
-                    render(parts[0], parts[1], query);
+                    render(parts[0], parts[1], query, failed);
                 });
             }
 

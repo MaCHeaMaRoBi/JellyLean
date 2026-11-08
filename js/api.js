@@ -234,8 +234,11 @@
             ],
             TranscodingProfiles: [
                 {
-                    Container: 'ts', Type: 'Video', VideoCodec: 'h264', AudioCodec: 'aac',
-                    Protocol: 'hls', Context: 'Streaming', MaxAudioChannels: '2',
+                    /* ac3 first so a 5.1 source keeps its channels when only the
+                       video needs transcoding; aac is the fallback for DTS/TrueHD
+                       and anything the server cannot pass through as AC3. */
+                    Container: 'ts', Type: 'Video', VideoCodec: 'h264', AudioCodec: 'ac3,eac3,aac',
+                    Protocol: 'hls', Context: 'Streaming', MaxAudioChannels: '6',
                     MinSegments: 1, BreakOnNonKeyFrames: true
                 },
                 { Container: 'mp3', Type: 'Audio', AudioCodec: 'mp3', Protocol: 'http', Context: 'Streaming' }
@@ -840,7 +843,15 @@
 
         absoluteUrl: function (pathOrUrl) {
             if (!pathOrUrl) return '';
-            if (/^https?:\/\//i.test(pathOrUrl)) return pathOrUrl;
+            var absolute = /^https?:\/\/([^\/]+)(.*)$/i.exec(pathOrUrl);
+            if (absolute) {
+                /* Keep an absolute URL only when it points at our own server.
+                   withApiKey() appends the token, so a server-supplied foreign
+                   host would silently receive it. */
+                var base = /^https?:\/\/([^\/]+)/i.exec(state.base || '');
+                if (base && absolute[1].toLowerCase() === base[1].toLowerCase()) return pathOrUrl;
+                pathOrUrl = absolute[2] || '/';
+            }
             return state.base + (pathOrUrl.charAt(0) === '/' ? '' : '/') + pathOrUrl;
         },
 
@@ -869,22 +880,16 @@
         },
 
         markPlayed: function (itemId) {
-            return request('POST', '/Users/' + state.userId + '/PlayedItems/' + itemId).catch(function (e) {
-                console.warn('markPlayed failed', e);
-            });
+            return request('POST', '/Users/' + state.userId + '/PlayedItems/' + itemId);
         },
 
         markUnplayed: function (itemId) {
-            return request('DELETE', '/Users/' + state.userId + '/PlayedItems/' + itemId).catch(function (e) {
-                console.warn('markUnplayed failed', e);
-            });
+            return request('DELETE', '/Users/' + state.userId + '/PlayedItems/' + itemId);
         },
 
         setFavorite: function (itemId, favorite) {
             return request(favorite ? 'POST' : 'DELETE',
-                '/Users/' + state.userId + '/FavoriteItems/' + itemId).catch(function (e) {
-                console.warn('setFavorite failed', e);
-            });
+                '/Users/' + state.userId + '/FavoriteItems/' + itemId);
         },
 
         /* ------------------------------------------------------ skip intro */

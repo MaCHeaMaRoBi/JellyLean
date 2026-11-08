@@ -129,6 +129,9 @@
 
     function image(path, size) {
         if (!path) return '';
+        /* TMDB hands back a relative path; anything else is server-controlled
+           text that would break out of the CSS url("...") it is placed in. */
+        if (!/^\/[\w.\-\/]+$/.test(path)) return '';
         return IMAGE_ROOT + (size || 'w342') + path;
     }
 
@@ -344,17 +347,17 @@
                 'Use the Jellyfin password or an API key instead.');
         },
 
-        /* Forget the Seerr connection on this TV. */
+        /* Forget the Seerr connection on this TV. The local state is cleared
+           before the request so a slow /auth/logout cannot wipe a connection
+           made in the meantime. */
         disconnect: function () {
             var wasSession = sessionMode() && isConfigured();
-            var done = wasSession ? call('POST', '/auth/logout').catch(function () {}) : Promise.resolve();
-            return done.then(function () {
-                /* The address stays, so connecting again is one step. */
-                Store.setPref('seerrKey', '');
-                Store.setPref('seerrMode', '');
-                statusCache = null;
-                statusInflight = null;
-            });
+            Store.setPref('seerrKey', '');
+            Store.setPref('seerrMode', '');
+            statusCache = null;
+            statusInflight = null;
+            if (!wasSession) return Promise.resolve();
+            return call('POST', '/auth/logout').catch(function () {});
         },
 
         mode: function () { return sessionMode() ? 'session' : (seerrKey() ? 'key' : ''); },
