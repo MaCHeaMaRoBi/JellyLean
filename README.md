@@ -8,6 +8,7 @@
   [![Latest release](https://img.shields.io/github/v/release/MaCHeaMaRoBi/JellyLean?style=flat-square&label=release)](../../releases/latest)
   ![Tizen 2.3+](https://img.shields.io/badge/Tizen-2.3%2B-1428A0?style=flat-square)
   ![Jellyfin 10.9+](https://img.shields.io/badge/Jellyfin-10.9%2B-00A4DC?style=flat-square)
+  ![Vibe-coded](https://img.shields.io/badge/vibe--coded-with%20AI-ff69b4?style=flat-square)
   [![MIT license](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
 
   [Features](#features) • [Install](#install) • [Build](#build-from-source) • [Development](#development) • [Troubleshooting](#troubleshooting)
@@ -15,13 +16,22 @@
 
 ![JellyLean home screen](docs/screenshots/01-home.webp)
 
-JellyLean is a hand-written Jellyfin client for Samsung Tizen TVs. The official
-`jellyfin-tizen` build ships the full jellyfin-web bundle, which is heavy on older
-hardware; JellyLean is plain ES5 with no framework and no build step, and talks to
-Jellyfin's REST and WebSocket APIs directly.
+JellyLean is a **vibe-coded** Jellyfin client for Samsung Tizen TVs, built with
+AI coding agents under human direction. The product decisions, hardware testing
+and review are human; most of the code, tests and documentation were generated
+with AI and iterated on until they worked.
+
+The official `jellyfin-tizen` build ships the full jellyfin-web bundle, which is
+heavy on older hardware; JellyLean is plain ES5 with no framework and no build
+step, and talks to Jellyfin's REST and WebSocket APIs directly.
 
 Built and tested on a **UE43M5602** (2017 M5 series, Tizen 3.0, 1080p); it should
 run on any Tizen TV from 2015 onwards.
+
+> [!NOTE]
+> This is a personal, vibe-coded project, not a polished commercial app. It is
+> tested against a real Jellyfin server and a 2017 Samsung TV, but expect rough
+> edges and opinionated choices.
 
 > [!TIP]
 > Just want it on your TV? Grab the signed `JellyLean.wgt` from the
@@ -260,6 +270,18 @@ item in a group sends `SetNewQueue` so every participant follows the same queue.
 **Compatibility.** One code path serves Jellyfin 10.x and 12.x: both auth header
 forms, repeated query keys instead of comma-joined lists, and both `api_key` and
 `ApiKey` WebSocket spellings.
+
+## How this was built
+
+JellyLean is a personal, vibe-coded project. Most of the code, tests and docs
+were written with AI coding agents, then run against a real Jellyfin server and
+a 2017 Samsung TV. The human side is the product direction, the hardware testing
+and the review — not every line of code.
+
+That has two practical consequences:
+
+- The test suites are the safety net. Run them before trusting a change.
+- Expect rough edges, opinionated choices and the occasional AI-shaped bug.
 
 ## Limitations
 

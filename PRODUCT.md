@@ -4,7 +4,7 @@ _Written from the repository's own README (no interview was possible; see the re
 
 ## What it is
 
-JellyLean is a hand-written Jellyfin client for Samsung Tizen TVs (verified on a 2017 UE43M5602, Tizen 3.0, 1080p). It browses a personal Jellyfin library, plays it through Samsung AVPlay, and adds Skip Intro, SyncPlay, subtitle and audio pickers, and Seerr discovery through your own Jellyseerr / Overseerr.
+JellyLean is a vibe-coded Jellyfin client for Samsung Tizen TVs, built with AI coding agents under human direction (verified on a 2017 UE43M5602, Tizen 3.0, 1080p). It browses a personal Jellyfin library, plays it through Samsung AVPlay, and adds Skip Intro, SyncPlay, subtitle and audio pickers, and Seerr discovery through your own Jellyseerr / Overseerr.
 
 ## Who uses it
 
