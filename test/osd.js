@@ -39,7 +39,8 @@ function advance(ms) {
 }
 
 ['js/util.js', 'js/store.js', 'js/api.js', 'js/icons.js', 'js/ui.js', 'js/player.js',
- 'js/subtitles.js', 'js/skipintro.js', 'js/syncplay.js'].forEach(function (f) {
+ 'js/subtitles.js', 'js/audio.js', 'js/skipintro.js', 'js/syncplay.js',
+ 'js/screens/player-audio.js'].forEach(function (f) {
     w.eval(fs.readFileSync(path.join(root, f), 'utf8'));
 });
 w.eval(fs.readFileSync(process.env.PLAYER_JS || path.join(root, 'js/screens/player-screen.js'), 'utf8'));
