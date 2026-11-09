@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <widget xmlns:tizen="http://tizen.org/ns/widgets" xmlns="http://www.w3.org/ns/widgets"
-        id="http://localhost/JellyfinLean" version="1.0.7" viewmodes="fullscreen">
+        id="http://localhost/JellyfinLean" version="1.0.8" viewmodes="fullscreen">
 
     <access origin="*" subdomains="true"/>
 
