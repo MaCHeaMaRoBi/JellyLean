@@ -43,7 +43,9 @@
         driftSamples: [],
         lastHardSeek: 0,
         speedChanged: false,
-        localBuffering: false
+        localBuffering: false,
+        /* Shown in the playback info panel: None, SpeedToSync or SkipToSync. */
+        syncMethod: 'None'
     };
 
     /* Hard seeks cost a rebuffer on Tizen (especially HLS transcodes), so they
@@ -98,6 +100,7 @@
         if (commandTimer) { clearTimeout(commandTimer); commandTimer = null; }
         if (syncTimer) { clearTimeout(syncTimer); syncTimer = null; }
         state.syncEnabled = false;
+        state.syncMethod = 'None';
     }
 
     function clearBufferingTimer() {
@@ -685,9 +688,13 @@
             resetDrift();
             quiet(4000);
             Player.seekTo(expectedMs);
+            state.syncMethod = 'SkipToSync';
             SyncPlay.emit('resync', diff);
             /* Let the rebuffer finish before measuring again. */
-            syncTimer = setTimeout(function () { state.syncEnabled = true; }, 4000);
+            syncTimer = setTimeout(function () {
+                state.syncMethod = 'None';
+                state.syncEnabled = true;
+            }, 4000);
             return;
         }
 
@@ -700,9 +707,11 @@
             state.speedChanged = true;
             resetDrift();
             Player.setSpeed(speed);
+            state.syncMethod = 'SpeedToSync';
             SyncPlay.emit('speed-sync', speed);
             syncTimer = setTimeout(function () {
                 restoreSpeed();
+                state.syncMethod = 'None';
                 state.syncEnabled = true;
             }, 1000);
         }
@@ -716,6 +725,7 @@
     SyncPlay.getCurrentPlaylistItemId = function () { return state.currentPlaylistItemId; };
     SyncPlay.getTimeOffset = function () { return state.timeOffset; };
     SyncPlay.getDrift = function () { return state.lastDiff; };
+    SyncPlay.getSyncMethod = function () { return state.syncMethod; };
     SyncPlay.getCurrentItemId = function () {
         var index = currentIndex();
         if (index < 0 || index >= state.playlist.length) return null;

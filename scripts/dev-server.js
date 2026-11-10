@@ -679,8 +679,11 @@ async function handleApi(req, res, url) {
         var request = await readBody(req);
         var direct = request.EnableDirectPlay !== false;
         var sourceId = 'ms-' + item.Id;
-        var transcodeUrl = '/Videos/' + item.Id + '/stream?static=true&MediaSourceId=' +
-            sourceId + '&PlaySessionId=devsession';
+        /* Same shape as a real transcoding URL: the info panel reads the target
+           codecs and the reasons straight out of these parameters. */
+        var transcodeUrl = '/Videos/' + item.Id + '/stream?VideoCodec=h264&AudioCodec=aac' +
+            '&TranscodingMaxAudioChannels=2&TranscodeReasons=AudioCodecNotSupported' +
+            '&MediaSourceId=' + sourceId + '&PlaySessionId=devsession';
         var subtitleIndex = request.SubtitleStreamIndex;
         var audioIndex = request.AudioStreamIndex;
 
@@ -707,8 +710,14 @@ async function handleApi(req, res, url) {
                 DirectStreamUrl: '/Videos/' + item.Id + '/stream?static=true&MediaSourceId=' + sourceId + '&PlaySessionId=devsession',
                 TranscodingUrl: direct ? null : transcodeUrl,
                 MediaStreams: [
-                    { Type: 'Video', Index: 0, Codec: 'h264', Width: 640, Height: 360 },
+                    /* The fields a real server sends on every stream: the info
+                       panel prints them, so the mock has to carry them. */
+                    { Type: 'Video', Index: 0, Codec: 'h264', Width: 640, Height: 360,
+                      Profile: 'High', Level: 41, BitRate: 1800000, AverageFrameRate: 24,
+                      BitDepth: 8, PixelFormat: 'yuv420p', VideoRangeType: 'SDR',
+                      ColorSpace: 'bt709', ColorPrimaries: 'bt709', ColorTransfer: 'bt709' },
                     { Type: 'Audio', Index: 1, Codec: 'aac', Channels: 2, Language: 'eng',
+                      Profile: 'LC', BitRate: 192000, SampleRate: 48000, BitDepth: 16,
                       IsDefault: true },
                     { Type: 'Audio', Index: 5, Codec: 'ac3', Channels: 6, Language: 'fra',
                       Title: 'French 5.1' },

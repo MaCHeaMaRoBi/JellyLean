@@ -572,6 +572,12 @@ async function main() {
         var infoText = await evaluate("document.querySelector('#playbackInfo').textContent");
         check('playback info panel lists the stream',
             /Direct play/.test(infoText) && /HTML5/.test(infoText) && /Container/.test(infoText), infoText);
+        check('playback info shows stream type, size and source detail',
+            /Stream type/.test(infoText) && /Direct play \(http\)/.test(infoText) &&
+            /Video size/.test(infoText) && /640\u00d7360/.test(infoText) &&
+            /Video attributes/.test(infoText) && /High, Lv 41, 1\.8 Mbps, 24\.00 fps/.test(infoText) &&
+            /8 Bit, yuv420p/.test(infoText) &&
+            /bt709\(m\), bt709\(p\), bt709\(t\)/.test(infoText), infoText);
         await capture('06e-info-panel');
 
         await press('Unidentified', 10009);
@@ -702,6 +708,10 @@ async function main() {
         var audioInfo = await evaluate("document.querySelector('#playbackInfo').textContent");
         check('playback info reports the selected audio',
             /ac3/i.test(audioInfo) && /6 ch/i.test(audioInfo), audioInfo);
+        check('transcoding info lists the target codecs and the reason',
+            /Transcoding Info/.test(audioInfo) && /H264, AAC, 2 Ch/.test(audioInfo) &&
+            /audio codec not supported/.test(audioInfo), audioInfo);
+        await capture('06f-info-transcode');
         await press('Unidentified', 10009);
         await waitFor("document.querySelector('#playbackInfo').classList.contains('hidden')",
             'audio info closed');
