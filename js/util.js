@@ -51,6 +51,17 @@
 
     function clamp(v, lo, hi) { return v < lo ? lo : (v > hi ? hi : v); }
 
+    /* How long a stream gets to produce its first frame before it is called
+       dead. A slow NAS and a dead stream look the same at first; only the bytes
+       still to arrive differ, so budget the wait from the bitrate: 8 s of video
+       at a pessimistic 1 MB/s, plus 5 s of fixed overhead. A 2 Mbps episode
+       gives up in ~8 s, a 40 Mbps remux is allowed ~45 s. `floorMs` keeps a
+       caller's minimum (a cold transcode needs longer than its bitrate says). */
+    function stallLimitMs(bitrate, floorMs) {
+        var ms = clamp(5000 + (bitrate || 0) / 1000, 8000, 45000);
+        return Math.max(floorMs || 0, ms);
+    }
+
     var toastTimer = null;
 
     function toast(message) {
@@ -551,6 +562,7 @@
         fmtTime: fmtTime,
         fmtRuntime: fmtRuntime,
         clamp: clamp,
+        stallLimitMs: stallLimitMs,
         toast: toast,
         emitter: emitter,
         isVisible: isVisible,

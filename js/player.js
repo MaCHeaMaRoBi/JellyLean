@@ -26,6 +26,7 @@
     var videoEl = null;
     var surfaceEl = null;
     var tickTimer = null;
+    var lastPlaytimeAt = 0;
     var lastSeekTarget = null;
     var stallTimer = null;
     var stallEmitted = false;
@@ -49,8 +50,14 @@
         stopTicker();
         tickTimer = setInterval(function () {
             if (!state.opened) return;
-            if (state.mode === 'avplay' && av) {
-                try { state.positionMs = av.getCurrentTime() || state.positionMs; } catch (e) { /* state not ready */ }
+            if (state.mode === 'avplay') {
+                /* oncurrentplaytime already carries the position; poll only if
+                   that event has gone quiet, so a firmware that stops sending
+                   it cannot freeze the clock (and a paused player never needs
+                   a poll: the position is not moving). */
+                if (av && !state.paused && Date.now() - lastPlaytimeAt > 2000) {
+                    try { state.positionMs = av.getCurrentTime() || state.positionMs; } catch (e) { /* state not ready */ }
+                }
             } else if (videoEl) {
                 state.positionMs = Math.round((videoEl.currentTime || 0) * 1000);
                 state.durationMs = Math.round((videoEl.duration || 0) * 1000) || state.durationMs;
@@ -66,8 +73,20 @@
     /* A direct-play stream can open "successfully" and still decode nothing —
        the classic black screen when the container/codec is not really
        supported. If no playback time is reported shortly after opening, say so
-       so the caller can fall back to a server transcode. */
-    function startWatchdog(limitMs) {
+       so the caller can fall back to a server transcode. The wait scales with
+       the bitrate (U.stallLimitMs): a slow NAS start is not a dead stream. */
+    function streamBitrate() {
+        var source = state.mediaSource;
+        if (!source) return 0;
+        if (source.Bitrate) return source.Bitrate;
+        var streams = source.MediaStreams || [];
+        for (var i = 0; i < streams.length; i++) {
+            if (streams[i].Type === 'Video' && streams[i].BitRate) return streams[i].BitRate;
+        }
+        return 0;
+    }
+
+    function startWatchdog(floorMs) {
         stopWatchdog();
         stallEmitted = false;
         stallArmedAt = Date.now();
@@ -75,7 +94,7 @@
            0:30 already has positionMs above the threshold before any frame has
            decoded, which used to disable the check for every resumed item. */
         stallBaseMs = state.positionMs;
-        var limit = limitMs || 12000;
+        var limit = U.stallLimitMs(streamBitrate(), floorMs);
         stallTimer = setInterval(function () {
             if (stallEmitted) return;
             /* A paused player never reports progress; that is not a stall. */
@@ -124,6 +143,7 @@
             oncurrentplaytime: function (ms) {
                 if (gen !== generation) return;
                 state.positionMs = ms;
+                lastPlaytimeAt = Date.now();
             },
             onbufferingstart: function () { if (gen !== generation) return; Player.emit('buffering', true); },
             onbufferingprogress: function (percent) { if (gen !== generation) return; Player.emit('buffering-progress', percent); },
@@ -279,6 +299,7 @@
         state.paused = true;
         state.opened = false;
         lastSeekTarget = null;
+        lastPlaytimeAt = 0;
 
         showStage(true);
 
@@ -293,12 +314,13 @@
         }
 
         /* A transcode warms up before its first segment exists, so the caller
-           can ask for more patience than a direct play needs. */
-        startWatchdog(options.watchdogMs);
+           can ask for more patience than the bitrate budget alone gives. */
+        startWatchdog(options.stallFloorMs);
         return Player;
     };
 
     Player.resume = function () {
+        if (state.paused === false) return;
         if (state.mode === 'avplay' && av) {
             try { av.play(); } catch (e) { console.warn(e); }
         } else if (videoEl) {
@@ -306,16 +328,21 @@
             if (p && p.catch) p.catch(function () {});
         }
         state.paused = false;
+        /* AVPlay's own PLAYING/PAUSED events are swallowed because the flag is
+           already set when they arrive, so announce the change here: the OSD
+           label and the server's paused state both hang off this event. */
+        Player.emit('playing');
     };
 
     Player.pause = function () {
+        if (state.paused) return;
         if (state.mode === 'avplay' && av) {
-            if (state.paused) return;
             try { av.pause(); } catch (e) { console.warn(e); }
         } else if (videoEl) {
             videoEl.pause();
         }
         state.paused = true;
+        Player.emit('paused');
     };
 
     Player.seekTo = function (ms) {

@@ -37,9 +37,11 @@ window.U = {};
 
 load('js/api.js', window);
 load('js/audio.js', window);
+load('js/util.js', window);
 
 var Api = window.Api;
 var AudioPrefs = window.AudioPrefs;
+var U = window.U;
 var passed = 0;
 
 function test(name, fn) {
@@ -290,6 +292,23 @@ test('a missing language on either side does not block the mapping', function ()
     var src = { MediaStreams: [stream(1, 'eng', 'ac3', 6), stream(2, '', 'aac', 2)] };
     var tracks = [{ index: 4, language: '' }, { index: 5, language: 'jpn' }];
     assert.strictEqual(AudioPrefs.avplayIndex(src, src.MediaStreams[1], tracks), 5);
+});
+
+/* The stall watchdog: a slow NAS start must not be called a dead stream, and
+   a dead low-bitrate stream must not hold the viewer for 12 s. */
+test('the stall limit scales with the bitrate', function () {
+    assert.strictEqual(U.stallLimitMs(0), 8000, 'no bitrate: the minimum');
+    assert.strictEqual(U.stallLimitMs(2000000), 8000, 'a small episode fails fast');
+    assert.strictEqual(U.stallLimitMs(10000000), 15000);
+    assert.strictEqual(U.stallLimitMs(20000000), 25000);
+    assert.strictEqual(U.stallLimitMs(40000000), 45000, 'a big remux gets patience');
+    assert.strictEqual(U.stallLimitMs(200000000), 45000, 'but never more than 45 s');
+});
+
+test('a caller floor can only raise the stall limit', function () {
+    assert.strictEqual(U.stallLimitMs(2000000, 40000), 40000, 'transcode floor wins');
+    assert.strictEqual(U.stallLimitMs(40000000, 40000), 45000, 'bitrate still wins above it');
+    assert.strictEqual(U.stallLimitMs(40000000, 0), 45000);
 });
 
 console.log('\n' + passed + ' passed' + (process.exitCode ? ', some FAILED' : ''));

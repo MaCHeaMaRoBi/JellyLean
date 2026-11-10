@@ -1532,10 +1532,10 @@
                     item: item,
                     mediaSource: session.source,
                     playSessionId: session.playSessionId,
-                    /* A 20 Mbps 1080p transcode needs a few seconds to emit its
-                       first frame; the direct-play watchdog window would kill
-                       it before it started. */
-                    watchdogMs: session.playMethod === 'Transcode' ? 40000 : 12000
+                    /* Direct play is budgeted from the stream bitrate inside
+                       Player; a cold transcode gets a floor because its first
+                       segment can take a while even for a small file. */
+                    stallFloorMs: session.playMethod === 'Transcode' ? 40000 : 0
                 });
                 SyncPlay.setPlaybackActive(true);
             }

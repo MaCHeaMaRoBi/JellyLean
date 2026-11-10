@@ -194,11 +194,15 @@
     }
 
     /* Samsung does not pause AVPlay when the app is hidden, so audio keeps
-       playing under the TV menu after HOME or standby. */
+       playing under the TV menu after HOME or standby. Pausing here emits
+       'paused', which also sends the position to the server: a TV switched off
+       from the menu never gets a clean exit, and the 10 s tick is throttled
+       while hidden. */
     function bindLifecycle() {
         document.addEventListener('visibilitychange', function () {
+            if (!document.hidden) return;
             var P = global.Player;
-            if (document.hidden && P && P.isOpen() && !P.isPaused()) P.pause();
+            if (P && P.isOpen() && !P.isPaused()) P.pause();
         });
     }
 
