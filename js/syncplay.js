@@ -53,11 +53,17 @@
     var HARD_SEEK_HTML5_MS = 400;
     var HARD_SEEK_COOLDOWN_MS = 8000;
 
+    /* A stall is only announced after it has lasted this long. jellyfin-web
+       does the same (HtmlVideoPlayer.minBufferingThresholdMillis); without it
+       every dropped buffer pauses the whole group and both sides hitch. */
+    var BUFFERING_REPORT_MS = 3000;
+
     var socket = null;
     var pingTimer = null;
     var pingStopped = true;
     var commandTimer = null;
     var syncTimer = null;
+    var bufferingTimer = null;
 
     var SyncPlay = U.emitter({});
 
@@ -92,6 +98,10 @@
         if (commandTimer) { clearTimeout(commandTimer); commandTimer = null; }
         if (syncTimer) { clearTimeout(syncTimer); syncTimer = null; }
         state.syncEnabled = false;
+    }
+
+    function clearBufferingTimer() {
+        if (bufferingTimer) { clearTimeout(bufferingTimer); bufferingTimer = null; }
     }
 
     /* -------------------------------------------------------------- socket */
@@ -469,6 +479,7 @@
     SyncPlay.disconnect = function () {
         if (socket) { socket.close(); socket = null; }
         clearCommandTimer();
+        clearBufferingTimer();
         stopTimeSync();
         state.enabled = false;
         state.group = null;
@@ -526,6 +537,7 @@
         resetDrift();
         restoreSpeed();
         clearCommandTimer();
+        clearBufferingTimer();
         stopTimeSync();
 
         if (wasEnabled) {
@@ -617,7 +629,20 @@
         state.localBuffering = !!isBuffering;
         /* A stall freezes the position, so samples taken around it are bogus. */
         resetDrift();
-        reportBuffering(isBuffering);
+
+        if (isBuffering) {
+            /* A paused player is not waiting to play: its buffer fill must not
+               drag the group into Waiting (and then resume it). */
+            if (Player.isPaused() || bufferingTimer || isQuiet()) return;
+            bufferingTimer = setTimeout(function () {
+                bufferingTimer = null;
+                if (state.localBuffering) reportBuffering(true);
+            }, BUFFERING_REPORT_MS);
+            return;
+        }
+
+        if (bufferingTimer) { clearTimeout(bufferingTimer); bufferingTimer = null; }
+        reportBuffering(false);
     };
 
     /* Seeks inside a group always arrive as Seek/Pause/Unpause commands, which
