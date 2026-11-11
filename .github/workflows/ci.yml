@@ -9,9 +9,11 @@ on:
 permissions:
   contents: read
 
+# Runner image is pinned on purpose: ubuntu-latest migrates underneath us (the
+# 26.04 move is announced), so bump this line deliberately after a green run.
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       # actions/checkout v7.0.1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -50,7 +52,7 @@ jobs:
         run: if [ -f test/store.js ]; then node test/store.js; fi
 
   smoke:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: test
     steps:
       # actions/checkout v7.0.1
