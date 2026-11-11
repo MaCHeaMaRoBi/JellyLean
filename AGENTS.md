@@ -49,6 +49,12 @@ exists (gitignored).
   - `maxBitrate` (Settings → Maximum bitrate, `0` = no limit) is an opt-in cap and must reach both `PlaybackInfo` and the device profile.
   - The device profile deliberately does not claim HEVC/DTS; a 4K HEVC remux is expected to transcode.
 
+## Tizen text fields & suspend (confirmed on the TV)
+
+- A focused `readonly` input does not raise the IME, so a field can stay navigable until OK. `UI.textField` relies on that: keep the `readonly` flip and the 60 ms re-focus after it.
+- The IME's Done key can close the keyboard without delivering Enter, and BACK is sometimes consumed by the IME. Either way the field stays in edit mode until the next key, so every handler resets `readonly` on the way out.
+- HOME hides the app without pausing AVPlay; `bindLifecycle` pauses on `visibilitychange` so the position reaches the server.
+
 ## SyncPlay expectations
 
 - The client authenticates the SyncPlay WebSocket using both `api_key` and `ApiKey` query spellings (12.x vs older servers).
@@ -65,8 +71,12 @@ exists (gitignored).
 5. Create the GitHub release **as a draft**, attach the asset named exactly
    `JellyLean.wgt` (Apps2Samsung catalog sync matches that name), download it back
    and compare its sha256 with the local build, put that sha256 in the release
-   notes, then publish.
+   notes.
+6. Enable immutable releases, confirm `{"enabled":true}`, then publish.
+   `gh api -X PUT repos/{owner}/{repo}/immutable-releases -F enabled=true` returns
+   422 ("enabled" is not a permitted key); the call that works is the same PUT
+   with no body.
 
 Releases are immutable once published: the asset and the tag can no longer be
 replaced or deleted. A mistake caught in the draft is fixable; the same mistake
-after publishing costs a new patch release.
+after publishing costs a new patch release — never re-tag or re-upload.
