@@ -1,0 +1,74 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Runner image is pinned on purpose: ubuntu-latest migrates underneath us (the
+# 26.04 move is announced), so bump this line deliberately after a green run.
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      # actions/checkout v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      # actions/setup-node v7.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: lts/*
+
+      # Same check as scripts/build.sh: the widget version and the client version
+      # ship together or the release is wrong.
+      - name: Version match
+        run: |
+          cfg=$(tr '\n' ' ' < config.xml | sed -n 's/.*<widget[^>]* version="\([0-9.]*\)".*/\1/p' | head -1)
+          api=$(sed -n "s/.*CLIENT_VERSION = '\([0-9.]*\)'.*/\1/p" js/api.js | head -1)
+          if [ -z "$cfg" ] || [ "$cfg" != "$api" ]; then
+            echo "version mismatch: config.xml=$cfg js/api.js=$api" >&2
+            exit 1
+          fi
+          echo "version $cfg matches"
+
+      # test/osd.js skips itself when jsdom is missing, so install it or the OSD
+      # regression is never covered. No package.json: --no-save leaves the tree clean.
+      - name: Install jsdom
+        run: npm install --no-save --no-audit --no-fund jsdom
+
+      - run: node test/profile.js
+      - run: node test/syncplay.js
+      - run: node scripts/check-design.js
+      - run: node test/osd.js
+
+      # Depends on Store.accounts, which is not committed yet.
+      - name: Store test
+        run: if [ -f test/store.js ]; then node test/store.js; fi
+
+  smoke:
+    runs-on: ubuntu-24.04
+    needs: test
+    steps:
+      # actions/checkout v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - name: Locate Chrome
+        run: echo "CHROME=$(command -v google-chrome || command -v google-chrome-stable || command -v chromium)" >> "$GITHUB_ENV"
+
+      # The dev server generates .dev/sample.mp4 with ffmpeg; without it every
+      # /Videos request 404s and the smoke test fails on console errors.
+      - name: Install ffmpeg
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends ffmpeg
+          ffmpeg -version | head -1
+
+      - run: node test/smoke.js

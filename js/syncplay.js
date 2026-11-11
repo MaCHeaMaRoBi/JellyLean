@@ -43,7 +43,9 @@
         driftSamples: [],
         lastHardSeek: 0,
         speedChanged: false,
-        localBuffering: false
+        localBuffering: false,
+        /* Shown in the playback info panel: None, SpeedToSync or SkipToSync. */
+        syncMethod: 'None'
     };
 
     /* Hard seeks cost a rebuffer on Tizen (especially HLS transcodes), so they
@@ -53,11 +55,17 @@
     var HARD_SEEK_HTML5_MS = 400;
     var HARD_SEEK_COOLDOWN_MS = 8000;
 
+    /* A stall is only announced after it has lasted this long. jellyfin-web
+       does the same (HtmlVideoPlayer.minBufferingThresholdMillis); without it
+       every dropped buffer pauses the whole group and both sides hitch. */
+    var BUFFERING_REPORT_MS = 3000;
+
     var socket = null;
     var pingTimer = null;
     var pingStopped = true;
     var commandTimer = null;
     var syncTimer = null;
+    var bufferingTimer = null;
 
     var SyncPlay = U.emitter({});
 
@@ -92,6 +100,11 @@
         if (commandTimer) { clearTimeout(commandTimer); commandTimer = null; }
         if (syncTimer) { clearTimeout(syncTimer); syncTimer = null; }
         state.syncEnabled = false;
+        state.syncMethod = 'None';
+    }
+
+    function clearBufferingTimer() {
+        if (bufferingTimer) { clearTimeout(bufferingTimer); bufferingTimer = null; }
     }
 
     /* -------------------------------------------------------------- socket */
@@ -469,6 +482,7 @@
     SyncPlay.disconnect = function () {
         if (socket) { socket.close(); socket = null; }
         clearCommandTimer();
+        clearBufferingTimer();
         stopTimeSync();
         state.enabled = false;
         state.group = null;
@@ -526,6 +540,7 @@
         resetDrift();
         restoreSpeed();
         clearCommandTimer();
+        clearBufferingTimer();
         stopTimeSync();
 
         if (wasEnabled) {
@@ -617,7 +632,20 @@
         state.localBuffering = !!isBuffering;
         /* A stall freezes the position, so samples taken around it are bogus. */
         resetDrift();
-        reportBuffering(isBuffering);
+
+        if (isBuffering) {
+            /* A paused player is not waiting to play: its buffer fill must not
+               drag the group into Waiting (and then resume it). */
+            if (Player.isPaused() || bufferingTimer || isQuiet()) return;
+            bufferingTimer = setTimeout(function () {
+                bufferingTimer = null;
+                if (state.localBuffering) reportBuffering(true);
+            }, BUFFERING_REPORT_MS);
+            return;
+        }
+
+        if (bufferingTimer) { clearTimeout(bufferingTimer); bufferingTimer = null; }
+        reportBuffering(false);
     };
 
     /* Seeks inside a group always arrive as Seek/Pause/Unpause commands, which
@@ -660,9 +688,13 @@
             resetDrift();
             quiet(4000);
             Player.seekTo(expectedMs);
+            state.syncMethod = 'SkipToSync';
             SyncPlay.emit('resync', diff);
             /* Let the rebuffer finish before measuring again. */
-            syncTimer = setTimeout(function () { state.syncEnabled = true; }, 4000);
+            syncTimer = setTimeout(function () {
+                state.syncMethod = 'None';
+                state.syncEnabled = true;
+            }, 4000);
             return;
         }
 
@@ -675,9 +707,11 @@
             state.speedChanged = true;
             resetDrift();
             Player.setSpeed(speed);
+            state.syncMethod = 'SpeedToSync';
             SyncPlay.emit('speed-sync', speed);
             syncTimer = setTimeout(function () {
                 restoreSpeed();
+                state.syncMethod = 'None';
                 state.syncEnabled = true;
             }, 1000);
         }
@@ -691,6 +725,7 @@
     SyncPlay.getCurrentPlaylistItemId = function () { return state.currentPlaylistItemId; };
     SyncPlay.getTimeOffset = function () { return state.timeOffset; };
     SyncPlay.getDrift = function () { return state.lastDiff; };
+    SyncPlay.getSyncMethod = function () { return state.syncMethod; };
     SyncPlay.getCurrentItemId = function () {
         var index = currentIndex();
         if (index < 0 || index >= state.playlist.length) return null;

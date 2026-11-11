@@ -1,31 +1,5 @@
-## graphify (OpenCode)
-
-When the user types `/graphify`, use the installed graphify skill or instructions **before** first grep/search/source-file reads.
-
-Rules:
-- If `graphify-out/graph.json` exists, run `graphify query "<question>"` before your first codebase question exploration, and include this rule in every subagent prompt.
-- Read raw files only for lines the graph (or an earlier read) already located.
-- Prefer `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused context.
-- Dirty `graphify-out/` outputs are expected after hooks; don’t skip graphify unless the task is about stale/incorrect graph output, or the user says not to.
-- Use `graphify-out/wiki/index.md` for broad navigation (not raw browsing).
-- Read `graphify-out/GRAPH_REPORT.md` only for broad architecture review when query/path/explain isn’t enough.
-- After modifying code or docs, run `graphify update .`.
-
-## ruflo (OpenCode MCP)
-
-Installed globally (`npm i -g ruflo`) and registered in `~/.config/opencode/opencode.json` as a local MCP server:
-
-```json
-"ruflo": { "type": "local", "command": ["ruflo", "mcp", "start", "--tools", "memory,swarm,agent,task"] }
-```
-
-- Use the `ruflo_*` MCP tools directly (e.g. `memory_store` / `memory_search`) — no shell call needed.
-- Its 81 agent definitions are converted to OpenCode subagents in `~/.config/opencode/agent/` (`planner`, `backend-dev`, `security-architect`, `swarm-pr`, …). `opencode debug agents` lists them; check there before adding a new agent.
-- Its 22 skills are in `~/.config/opencode/skills/` (`swarm-orchestration`, `agentdb-*`, `github-*`, `pair-programming`, `verification-quality`, …).
-- Prompts were remapped: `mcp__claude-flow__x` → `ruflo_x`, `npx claude-flow@v3alpha` → `ruflo`. Commands that never existed (`ruflo github`, `ruflo actions`, `ruflo ddd`, `ruflo integration`) are marked as sketches in the files that use them.
-- Vector memory is per project in `.swarm/` (gitignored). Keep project facts in namespace `jellylean`.
-- The full server advertises 386 tools (~75k schema tokens). Keep `--tools` curated; add selectors there only when a group is actually needed.
-- `ruflo doctor` for health, `ruflo mcp tools` to list what is exposed.
+Per-machine agent tooling is kept out of this repo; read `AGENTS.local.md` if it
+exists (gitignored).
 
 ## Tizen / widget build & install (avoid guessing)
 
@@ -54,7 +28,7 @@ Installed globally (`npm i -g ruflo`) and registered in `~/.config/opencode/open
   - Screenshots: `SHOTS=1 node test/smoke.js`
   - Browser path: `CHROME=/path/to/chromium node test/smoke.js`
 - Regression tests that need no server:
-  - `node test/profile.js` → device profile (codecs, channels, HEVC, resolution caps) and audio-track logic; run it after touching `deviceProfile` in `js/api.js` or `js/audio.js`
+  - `node test/profile.js` → device profile (codecs, channels, HEVC, resolution caps), audio-track logic and the bitrate-scaled stall limit; run it after touching `deviceProfile` in `js/api.js`, `js/audio.js` or `U.stallLimitMs`
   - `node test/syncplay.js` → SyncPlay state machine, pause/resume feedback loop, drift correction
   - `node test/osd.js` → OSD fade behaviour. Needs jsdom; it silently skips when jsdom is absent (`JSDOM_DIR=/tmp/jd node test/osd.js` to point at an install)
   - `node scripts/check-design.js` → every stylesheet colour must be defined in `DESIGN.md`
@@ -85,7 +59,14 @@ Installed globally (`npm i -g ruflo`) and registered in `~/.config/opencode/open
 ## Release checklist
 
 1. Bump `version` in `config.xml` and `CLIENT_VERSION` in `js/api.js` together (the build guards version drift).
-2. `graphify update .`, then `scripts/build.sh`.
+2. `scripts/build.sh`.
 3. Verify `dist/JellyLean.wgt`: version, app/package ids, `required_version="2.3"`, both author and distributor signatures, sha256.
 4. Commit, `git fetch`/rebase, push `main`, tag `vX.Y.Z`, push the tag.
-5. Create the GitHub release and upload the asset **named exactly `JellyLean.wgt`** (Apps2Samsung catalog sync matches that name). Download it back and compare sha256.
+5. Create the GitHub release **as a draft**, attach the asset named exactly
+   `JellyLean.wgt` (Apps2Samsung catalog sync matches that name), download it back
+   and compare its sha256 with the local build, put that sha256 in the release
+   notes, then publish.
+
+Releases are immutable once published: the asset and the tag can no longer be
+replaced or deleted. A mistake caught in the draft is fixable; the same mistake
+after publishing costs a new patch release.

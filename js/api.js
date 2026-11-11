@@ -899,7 +899,7 @@
             var split = pathOrUrl.indexOf('?');
             if (split === -1) return null;
 
-            var out = { audioCodec: '', audioChannels: 0, reasons: [] };
+            var out = { videoCodec: '', audioCodec: '', audioChannels: 0, reasons: [] };
             var parts = pathOrUrl.slice(split + 1).split('&');
             for (var i = 0; i < parts.length; i++) {
                 var eq = parts[i].indexOf('=');
@@ -907,7 +907,8 @@
                 var key = parts[i].slice(0, eq).toLowerCase();
                 var value = parts[i].slice(eq + 1);
                 try { value = decodeURIComponent(value); } catch (e) { /* keep raw */ }
-                if (key === 'audiocodec') out.audioCodec = value.split(',')[0];
+                if (key === 'videocodec') out.videoCodec = value.split(',')[0];
+                else if (key === 'audiocodec') out.audioCodec = value.split(',')[0];
                 else if (key === 'transcodingmaxaudiochannels' || key === 'maxaudiochannels') {
                     out.audioChannels = Number(value) || 0;
                 } else if (key === 'transcodereasons') {

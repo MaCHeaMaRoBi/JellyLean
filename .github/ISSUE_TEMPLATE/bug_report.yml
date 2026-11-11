@@ -1,0 +1,64 @@
+name: Bug report
+description: Something in the app is broken or looks wrong
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before posting: remove your server address, username and access token from
+        anything you paste. Security problems go through
+        [private vulnerability reporting](../security/advisories/new), not a public issue.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happens
+      description: What you expected, and what the TV actually did.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open a movie with a DTS track
+        2. ...
+    validations:
+      required: true
+  - type: input
+    id: tv
+    attributes:
+      label: TV model and Tizen version
+      description: The model number on the back of the TV, and the Tizen version from Settings → Support → About.
+      placeholder: UE43M5602, Tizen 3.0
+    validations:
+      required: true
+  - type: input
+    id: client
+    attributes:
+      label: JellyLean version
+      description: Settings → Server & Device in the app.
+      placeholder: 1.0.9
+    validations:
+      required: true
+  - type: input
+    id: server
+    attributes:
+      label: Jellyfin server version
+      description: Dashboard → General in Jellyfin.
+      placeholder: 10.10.7
+    validations:
+      required: true
+  - type: dropdown
+    id: engine
+    attributes:
+      label: Playback engine
+      description: Shows as Direct play / Transcode in the INFO panel.
+      options:
+        - Direct play
+        - Transcode
+        - Not a playback problem
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or screenshots
+      description: TV console output, a screenshot, or the INFO panel contents. Strip tokens and addresses first.

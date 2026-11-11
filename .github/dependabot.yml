@@ -1,0 +1,9 @@
+version: 2
+
+# No npm dependencies in this repo, so Actions versions are the only thing to
+# watch: a repointed action tag is the usual way a build pipeline gets hijacked.
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

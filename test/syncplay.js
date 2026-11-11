@@ -134,9 +134,23 @@ function wait(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
        reported so the group waits for the TV. */
     await wait(2600);
     var b0 = requests.buffering;
+    /* A dip shorter than the debounce must never reach the group: telling it
+       "waiting" pauses every device, which is the stutter users see. */
     SyncPlay.onBuffering(true);
+    await wait(1500);
+    SyncPlay.onBuffering(false);
+    await wait(1800);
+    var microStallQuiet = requests.buffering === b0;
+    console.log('1.5 s micro-stall reported: ' + !microStallQuiet);
+
+    var r1 = requests.ready;
+    SyncPlay.onBuffering(true);
+    await wait(3300);
     var stallReported = requests.buffering - b0 === 1;
-    console.log('Genuine buffering reported: ' + stallReported);
+    SyncPlay.onBuffering(false);
+    var stallReady = requests.ready - r1 === 1;
+    console.log('Genuine 3 s+ stall reported: ' + stallReported +
+        ', Ready on recovery: ' + stallReady);
 
     /* Drift correction. A TV in sync whose position readings are noisy
        (+-450 ms, as sampled every 500 ms) must not be seeked or re-speeded:
@@ -183,8 +197,8 @@ function wait(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
     var disconnectClear = paused === false;
     console.log('Scheduled command cancelled on disconnect: ' + disconnectClear);
 
-    var ok = loopFree && resumeRebufferQuiet && seekAcked && stallReported &&
-        steady && corrected && disconnectClear;
+    var ok = loopFree && resumeRebufferQuiet && seekAcked && microStallQuiet &&
+        stallReported && stallReady && steady && corrected && disconnectClear;
     console.log(ok ? 'PASS' : 'FAIL');
     process.exit(ok ? 0 : 1);
 })();

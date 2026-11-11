@@ -10,6 +10,9 @@ node_modules/
 .agents/
 skills-lock.json
 
+# Per-machine agent setup notes (not part of the public repo)
+AGENTS.local.md
+
 # Graphify knowledge graph (generated; rebuild with: graphify extract . --code-only)
 graphify-out/
 

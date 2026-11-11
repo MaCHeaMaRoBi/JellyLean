@@ -229,9 +229,40 @@
         rows.appendChild(row);
     }
 
+    function infoSection(heading) {
+        var box = U.el('div', 'info-section');
+        box.appendChild(U.el('div', 'info-heading', heading));
+        els.infoPanel.appendChild(box);
+        return box;
+    }
+
     /* Jellyfin's TranscodeReasons are CamelCase identifiers. */
     function transcodeReason(code) {
         return String(code).replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase();
+    }
+
+    /* Jellyfin reports codecs lowercase; the panel reads like the server's. */
+    var CODEC_NAMES = {
+        h264: 'H264', hevc: 'HEVC', av1: 'AV1', vp9: 'VP9', mpeg2video: 'MPEG-2',
+        ac3: 'AC3', eac3: 'EAC3', truehd: 'TRUEHD', dts: 'DTS', aac: 'AAC',
+        flac: 'FLAC', opus: 'Opus', mp3: 'MP3'
+    };
+
+    function codecName(codec) {
+        if (!codec) return '';
+        return CODEC_NAMES[String(codec).toLowerCase()] || String(codec);
+    }
+
+    function mbps(value) { return value ? (value / 1e6).toFixed(1) + ' Mbps' : ''; }
+    function gib(value) { return value ? (value / 1073741824).toFixed(1) + ' GiB' : ''; }
+
+    /* Drops the empty entries so the joined value has no dangling commas. */
+    function parts(list, separator) {
+        var out = [];
+        for (var i = 0; i < list.length; i++) {
+            if (list[i] !== '' && list[i] !== null && list[i] !== undefined) out.push(list[i]);
+        }
+        return out.join(separator);
     }
 
     function paintInfo() {
@@ -243,14 +274,22 @@
         var source = session.source || {};
         var streams = source.MediaStreams || [];
         var video = null;
+        var sourceAudio = null;
         var subtitleCount = 0;
 
         for (var i = 0; i < streams.length; i++) {
             if (!video && streams[i].Type === 'Video') video = streams[i];
+            if (!sourceAudio && streams[i].Type === 'Audio') sourceAudio = streams[i];
             if (streams[i].Type === 'Subtitle') subtitleCount++;
         }
 
         var audio = session.audioStream || AudioPrefs.pick(source);
+        var transcoding = session.playMethod === 'Transcode';
+        var plan = transcoding ? Api.transcodeInfo(source.TranscodingUrl) : null;
+        var output = transcoding ? String(session.outputLabel || '') : '';
+        var outRes = /\d+x\d+/.exec(output);
+        var outMbps = /([\d.]+)\s*Mbps/.exec(output);
+        var scheme = /^https:/i.test(Api.absoluteUrl(session.url || '')) ? 'https' : 'http';
 
         var title = item.Name || 'Playback';
         if (item.Type === 'Episode' && item.SeriesName) {
@@ -258,43 +297,28 @@
         }
         els.infoPanel.appendChild(U.el('div', 'info-title', title));
 
-        var rows = U.el('div', 'info-rows');
+        /* ------------------------------------------------- playback info */
+        var playback = infoSection('Playback Info');
 
-        infoRow(rows, 'Playback', session.playMethod === 'Transcode' ? 'Transcode (server)'
-            : (session.playMethod === 'DirectStream' ? 'Direct stream' : 'Direct play'));
-        infoRow(rows, 'Engine', Player.engine());
-        infoRow(rows, 'Container', source.Container || '?');
+        infoRow(playback, 'Player', Player.engine());
+        infoRow(playback, 'Stream type',
+            (transcoding ? 'HLS'
+                : (session.playMethod === 'DirectStream' ? 'Direct stream' : 'Direct play')) +
+            ' (' + scheme + ')');
 
-        if (video) {
-            var videoLabel = (video.Codec || '?') + '  ' + (video.Width || '?') + '\u00d7' + (video.Height || '?');
-            if (video.BitRate) videoLabel += '  \u00b7  ' + Math.round(video.BitRate / 1000) + ' kbps';
-            infoRow(rows, 'Source video', videoLabel);
-        }
-
-        if (session.playMethod === 'Transcode') {
-            infoRow(rows, 'Output', session.outputLabel || 'negotiating\u2026');
-            var capMbps = Store.pref('maxBitrate', 0);
-            infoRow(rows, 'Bitrate cap', (capMbps > 0 ? capMbps + ' Mbps' : 'None') + ' (1920\u00d71080 max)');
+        if (video && video.Width && video.Height) {
+            var sourceSize = video.Width + '\u00d7' + video.Height;
+            infoRow(playback, 'Video size', outRes
+                ? outRes[0].replace('x', '\u00d7') + ' / ' + sourceSize
+                : sourceSize);
         }
 
         if (audio) {
-            var audioLabel = audio.Codec || '?';
-            if (audio.Channels) audioLabel += '  \u00b7  ' + audio.Channels + ' ch';
-            if (audio.Language) audioLabel += '  \u00b7  ' + String(audio.Language).toUpperCase();
-            infoRow(rows, 'Audio', audioLabel);
-        }
-
-        if (session.playMethod === 'Transcode') {
-            /* What the server decided and why, from its own transcoding URL. */
-            var plan = Api.transcodeInfo(source.TranscodingUrl);
-            if (plan && plan.audioCodec) {
-                var outLabel = plan.audioCodec.toUpperCase();
-                if (plan.audioChannels) outLabel += '  \u00b7  up to ' + plan.audioChannels + ' ch';
-                infoRow(rows, 'Audio output', outLabel);
-            }
-            if (plan && plan.reasons.length) {
-                infoRow(rows, 'Transcoding because', plan.reasons.map(transcodeReason).join(', '));
-            }
+            infoRow(playback, 'Audio', parts([
+                codecName(audio.Codec),
+                audio.Channels ? audio.Channels + ' Ch' : '',
+                audio.Language ? String(audio.Language).toUpperCase() : ''
+            ], ' \u00b7 '));
         }
 
         var subtitleValue;
@@ -302,15 +326,87 @@
             subtitleValue = subtitleLabel(session.subtitleStream);
             if (Subtitles.isImageCodec(session.subtitleStream.Codec) &&
                     session.burnedSubtitleIndex === session.subtitleStream.Index) {
-                subtitleValue += '  \u00b7  Burned in';
+                subtitleValue += ' \u00b7  Burned in';
             }
         } else {
             subtitleValue = subtitleCount ? 'Off  (' + subtitleCount + ' available)' : 'None';
         }
-        infoRow(rows, 'Subtitles', subtitleValue);
+        infoRow(playback, 'Subtitles', subtitleValue);
 
-        els.infoPanel.appendChild(rows);
-        els.infoPanel.appendChild(U.el('div', 'info-hint', 'BACK closes this panel'));
+        if (transcoding) {
+            var capMbps = Store.pref('maxBitrate', 0);
+            infoRow(playback, 'Bitrate cap', (capMbps > 0 ? capMbps + ' Mbps' : 'None') + ' (1920\u00d71080 max)');
+        }
+
+        /* ------------------------------------------------------ transcoding */
+        if (transcoding) {
+            var transcode = infoSection('Transcoding Info');
+
+            infoRow(transcode, 'Target codecs', parts([
+                plan ? codecName(plan.videoCodec) : '',
+                plan ? codecName(plan.audioCodec) : '',
+                plan && plan.audioChannels ? plan.audioChannels + ' Ch' : '',
+                outMbps ? outMbps[1] + ' Mbps' : ''
+            ], ', '));
+
+            if (plan && plan.reasons.length) {
+                infoRow(transcode, 'Reasons', plan.reasons.map(transcodeReason).join(', '));
+            }
+        }
+
+        /* --------------------------------------------------- original media */
+        var original = infoSection('Original Media Info');
+
+        infoRow(original, 'Container', parts([
+            source.Container, gib(source.Size), mbps(source.Bitrate)
+        ], ', '));
+
+        if (video) {
+            infoRow(original, 'Video codec', codecName(video.Codec));
+
+            var fps = video.RealFrameRate || video.AverageFrameRate;
+            infoRow(original, 'Video attributes', parts([
+                video.Profile,
+                video.Level ? 'Lv ' + video.Level : '',
+                mbps(video.BitRate),
+                fps ? Number(fps).toFixed(2) + ' fps' : ''
+            ], ', '));
+
+            var range = video.VideoRangeType || video.VideoRange;
+            infoRow(original, 'Video bit depth', parts([
+                video.BitDepth ? video.BitDepth + ' Bit' : '',
+                video.PixelFormat,
+                range && String(range).toUpperCase() !== 'SDR' ? range : ''
+            ], ', '));
+
+            infoRow(original, 'Video colors', parts([
+                video.ColorSpace ? video.ColorSpace + '(m)' : '',
+                video.ColorPrimaries ? video.ColorPrimaries + '(p)' : '',
+                video.ColorTransfer ? video.ColorTransfer + '(t)' : ''
+            ], ', '));
+        }
+
+        if (sourceAudio) {
+            infoRow(original, 'Audio codec', parts([
+                codecName(sourceAudio.Codec), sourceAudio.Profile
+            ], ' '));
+
+            infoRow(original, 'Audio attributes', parts([
+                sourceAudio.Channels ? sourceAudio.Channels + ' Ch' : '',
+                mbps(sourceAudio.BitRate),
+                sourceAudio.SampleRate ? sourceAudio.SampleRate + ' Hz' : '',
+                sourceAudio.BitDepth ? sourceAudio.BitDepth + ' Bit' : ''
+            ], ', '));
+        }
+
+        /* --------------------------------------------------------- syncplay */
+        if (SyncPlay.isEnabled()) {
+            var sync = infoSection('SyncPlay Info');
+            infoRow(sync, 'Time syncing with', 'Server');
+            infoRow(sync, 'Time offset', SyncPlay.getTimeOffset().toFixed(2) + ' ms');
+            infoRow(sync, 'Playback time difference', SyncPlay.getDrift().toFixed(2) + ' ms');
+            infoRow(sync, 'Sync method', SyncPlay.getSyncMethod());
+        }
     }
 
     /* The playlist states the negotiated output; the media streams only
@@ -1532,10 +1628,10 @@
                     item: item,
                     mediaSource: session.source,
                     playSessionId: session.playSessionId,
-                    /* A 20 Mbps 1080p transcode needs a few seconds to emit its
-                       first frame; the direct-play watchdog window would kill
-                       it before it started. */
-                    watchdogMs: session.playMethod === 'Transcode' ? 40000 : 12000
+                    /* Direct play is budgeted from the stream bitrate inside
+                       Player; a cold transcode gets a floor because its first
+                       segment can take a while even for a small file. */
+                    stallFloorMs: session.playMethod === 'Transcode' ? 40000 : 0
                 });
                 SyncPlay.setPlaybackActive(true);
             }
