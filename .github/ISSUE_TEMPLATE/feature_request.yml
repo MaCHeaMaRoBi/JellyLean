@@ -1,0 +1,27 @@
+name: Feature request
+description: Suggest something the app should do
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        JellyLean is a remote-first TV client: no pointer, no keyboard beyond setup.
+        Ideas that work with four-way navigation and the playback keys fit best.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What can't you do today
+      description: The situation you are in, not the solution yet.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What you would like to happen
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives
+      description: Other clients, remote keys or workarounds you have tried.
