@@ -61,4 +61,12 @@ jobs:
       - name: Locate Chrome
         run: echo "CHROME=$(command -v google-chrome || command -v google-chrome-stable || command -v chromium)" >> "$GITHUB_ENV"
 
+      # The dev server generates .dev/sample.mp4 with ffmpeg; without it every
+      # /Videos request 404s and the smoke test fails on console errors.
+      - name: Install ffmpeg
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends ffmpeg
+          ffmpeg -version | head -1
+
       - run: node test/smoke.js

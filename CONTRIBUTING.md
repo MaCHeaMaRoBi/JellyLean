@@ -23,6 +23,10 @@ Sign in with any username and password against the mock. `localStorage.clear()`
 resets the client. `NO_MOCK=1 node scripts/dev-server.js` serves the static app
 against a real server instead.
 
+The mock generates its 20 s sample video with `ffmpeg` into `.dev/`; without
+ffmpeg on your PATH every `/Videos` request 404s and the smoke test fails on the
+resulting console errors.
+
 Node.js 18+ is enough; nothing is installed.
 
 ## Tests
