@@ -82,10 +82,7 @@
 
     function personImageUrl(person) {
         if (!person || !person.Id) return '';
-        var query = '/Items/' + person.Id + '/Images/Primary?maxWidth=240&quality=84&api_key=' +
-            encodeURIComponent(Api.token);
-        if (person.PrimaryImageTag) query += '&tag=' + encodeURIComponent(person.PrimaryImageTag);
-        return Api.base + query;
+        return Api.imageById(person.Id, 'Primary', 192, person.PrimaryImageTag, 192);
     }
 
     function initials(name) {
@@ -107,12 +104,10 @@
         var clip = U.el('div', 'art-clip');
         var url = personImageUrl(person);
         if (url) {
-            var img = UI.lazyImage(url, person.Name, null);
-            img.onerror = function () {
+            clip.appendChild(UI.lazyImage(url, person.Name, null, function (img) {
                 if (img.parentNode) img.parentNode.removeChild(img);
                 clip.appendChild(U.el('span', 'person-initials', initials(person.Name)));
-            };
-            clip.appendChild(img);
+            }));
         } else {
             clip.appendChild(U.el('span', 'person-initials', initials(person.Name)));
         }
@@ -207,7 +202,7 @@
     }
 
     function hero(item) {
-        var node = U.el('section', 'cinema-hero' + (UI.backdropUrl(item, 1600) ? '' : ' bare'));
+        var node = U.el('section', 'cinema-hero' + (UI.backdropUrl(item, 1920) ? '' : ' bare'));
         node.setAttribute('data-scroll-top', '');
 
         node.appendChild(UI.titleBlock(item, 'stage-title', 'h1'));
@@ -368,7 +363,7 @@
 
     function paint(shell, item) {
         U.clear(shell.scroll);
-        if (shell.backdrop) shell.backdrop.set(UI.backdropUrl(item, 1600));
+        if (shell.backdrop) shell.backdrop.set(UI.backdropUrl(item, 1920));
 
         shell.scroll.appendChild(hero(item));
 

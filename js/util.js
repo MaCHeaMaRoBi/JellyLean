@@ -268,6 +268,10 @@
     var lazyTimer = null;
     var LAZY_X = 1500;
     var LAZY_Y = 1300;
+    /* Images further out than this are dropped again: a 300-title shelf would
+       otherwise keep every decoded bitmap alive for the whole session. */
+    var RELEASE_X = 3200;
+    var RELEASE_Y = 2600;
 
     function lazyCheck() {
         lazyTimer = null;
@@ -281,6 +285,17 @@
                 img.src = img.getAttribute('data-src');
                 img.removeAttribute('data-src');
             }
+        }
+
+        var loaded = $all('img[data-lazy][src]');
+        for (var j = 0; j < loaded.length; j++) {
+            var far = loaded[j];
+            var box = finalRect(far);
+            if (box.right > -RELEASE_X && box.left < 1920 + RELEASE_X &&
+                    box.bottom > -RELEASE_Y && box.top < 1080 + RELEASE_Y) continue;
+            far.setAttribute('data-src', far.getAttribute('src'));
+            far.removeAttribute('src');
+            far.className = '';
         }
     }
 

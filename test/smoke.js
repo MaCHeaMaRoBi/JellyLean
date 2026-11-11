@@ -366,6 +366,13 @@ async function main() {
         check('every card image asks for a sized render', art.length > 0 && unsized.length === 0,
             unsized.length + ' of ' + art.length + ' unsized: ' + unsized.slice(0, 3).join(' | '));
         check('no card image asks for more than 1600 px', widest <= 1600, widest + ' px');
+        check('card artwork asks for WebP',
+            art.every(function (src) { return /[?&]format=webp/.test(src); }),
+            art.filter(function (src) { return !/[?&]format=webp/.test(src); }).slice(0, 2).join(' | '));
+        check('a failed WebP retries the original format',
+            (await evaluate("UI.withoutWebp(UI.webpUrl(" +
+                "'http://h/Items/1/Images/Primary?maxWidth=288&quality=84'))")) ===
+            'http://h/Items/1/Images/Primary?maxWidth=288&quality=84');
 
         /* The hero only appears when something is resumable, and the mock
            catalogue has no history. Stub one item in to exercise that path. */
