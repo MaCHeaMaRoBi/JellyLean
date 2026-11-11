@@ -8,6 +8,7 @@
     var step = 'server';
     var pendingServer = null;
     var rootEl = null;
+    var screenEl = null;
     /* True when the viewer reached the server step from the account picker, so
        Back returns there instead of pretending the picker never existed. */
     var fromPicker = false;
@@ -15,6 +16,15 @@
     function setError(message) {
         var node = U.$('#setupErr');
         if (node) node.textContent = message || '';
+    }
+
+    /* Every field starts navigable; the keyboard layout (and the keyboard) only
+       appears while one is being edited. */
+    function arm(input) {
+        return UI.textField(input, {
+            onStart: function () { if (screenEl) screenEl.classList.add('typing'); },
+            onStop: function () { if (screenEl) screenEl.classList.remove('typing'); }
+        });
     }
 
     function serverLabel(account) {
@@ -89,6 +99,7 @@
 
         var input = U.$('#serverUrl');
         input.value = Store.get('lastServer', '');
+        arm(input);
         var button = UI.iconize(U.$('#connectBtn'), 'check', 'Connect');
         var busy = false;
 
@@ -177,6 +188,8 @@
             password.setAttribute('autocorrect', 'off');
             password.setAttribute('spellcheck', 'false');
         }
+        arm(username);
+        arm(password);
         var loginBtn = UI.iconize(U.$('#loginBtn'), 'check', 'Sign In');
         UI.iconize(U.$('#quickBtn'), 'users', 'Quick Connect');
         UI.iconize(U.$('#backBtn'), 'back', 'Back');
@@ -306,6 +319,7 @@
 
     function render() {
         U.clear(rootEl);
+        if (screenEl) screenEl.classList.remove('typing');
         if (step === 'accounts') accountStep();
         else if (step === 'server' || !pendingServer) serverStep();
         else if (step === 'login') loginStep();
@@ -321,23 +335,8 @@
             fromPicker = false;
             pendingServer = null;
             var screen = U.el('div', 'screen setup');
+            screenEl = screen;
             screen.appendChild(U.el('div', 'setup-glow'));
-
-            /* While a text field is focused the TV keyboard covers the lower half
-               of the screen: pack the form into the top half so the field, and
-               what is typed in it, stay visible. */
-            function isTextField(node) {
-                return !!node && node.tagName === 'INPUT';
-            }
-            screen.addEventListener('focus', function (event) {
-                if (isTextField(event.target)) screen.classList.add('typing');
-            }, true);
-            screen.addEventListener('blur', function (event) {
-                if (!isTextField(event.target)) return;
-                setTimeout(function () {
-                    if (!isTextField(document.activeElement)) screen.classList.remove('typing');
-                }, 0);
-            }, true);
 
             var brand = U.el('div', 'setup-brand');
             var mark = U.el('div', 'wordmark');

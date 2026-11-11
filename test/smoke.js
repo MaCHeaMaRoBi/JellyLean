@@ -247,13 +247,35 @@ async function main() {
         check('setup screen renders', true);
         await capture('01-setup');
 
-        /* The TV's on-screen keyboard holds focus in the text field. Arrows must
-           still reach the buttons, otherwise Connect can never be pressed. */
-        await evaluate("var i=document.querySelector('#serverUrl'); i.value=''; i.focus(); true");
-        await sleep(150);
+        /* The TV's on-screen keyboard opens on focus, so a field stays readonly
+           until OK is pressed on it: moving through the form must not pop it up. */
+        await waitFor("document.activeElement && document.activeElement.id === 'serverUrl'",
+            'server field focus');
+        check('the focused server field is readonly',
+            (await evaluate("document.querySelector('#serverUrl').readOnly")) === true);
+        check('the keyboard layout stays away until editing',
+            (await evaluate("document.querySelector('.screen.setup').classList.contains('typing')")) === false);
+        await press('ArrowRight', 39);
+        await press('ArrowLeft', 37);
+        check('left/right leave the field navigable',
+            (await evaluate("document.querySelector('#serverUrl').readOnly &&" +
+                " document.activeElement.id === 'serverUrl'")) === true);
+        await press('Enter', 13);
+        await sleep(120);
+        check('OK on the field starts editing',
+            (await evaluate("var i=document.querySelector('#serverUrl');" +
+                " i.readOnly === false && document.activeElement === i")) === true);
+        check('editing raises the keyboard layout',
+            (await evaluate("document.querySelector('.screen.setup').classList.contains('typing')")) === true);
+        await evaluate("document.querySelector('#serverUrl').value=''; true");
         await press('ArrowDown', 40);
+        await sleep(120);
         check('down from the field focuses Connect',
             (await evaluate("document.activeElement.id")) === 'connectBtn');
+        check('leaving the field makes it readonly again',
+            (await evaluate("document.querySelector('#serverUrl').readOnly")) === true);
+        check('the keyboard layout drops with the field',
+            (await evaluate("document.querySelector('.screen.setup').classList.contains('typing')")) === false);
 
         check('setup actions carry icons',
             (await evaluate("document.querySelectorAll('#connectBtn svg.icon').length")) === 1);
@@ -262,7 +284,9 @@ async function main() {
             (await evaluate("document.activeElement.id")) === 'serverUrl');
 
         await evaluate("document.querySelector('#serverUrl').value='localhost:" + PORT + "'; true");
-        await press('ArrowDown', 40);
+        /* Enter in edit mode still connects, as it always did. */
+        await press('Enter', 13);
+        await sleep(120);
         await press('Enter', 13);
 
         await waitFor("!!document.querySelector('#username')", 'login step');
@@ -271,6 +295,9 @@ async function main() {
            would send Down to whatever still owned focus. */
         await waitFor("document.activeElement && document.activeElement.id === 'username'",
             'username focus');
+        check('the username field arrives readonly',
+            (await evaluate("document.querySelector('#username').readOnly")) === true);
+
         await press('ArrowDown', 40);
         check('down moves username to password',
             (await evaluate("document.activeElement.id")) === 'password');
@@ -280,6 +307,24 @@ async function main() {
         await press('ArrowRight', 39);
         check('right reaches Quick Connect',
             (await evaluate("document.activeElement.id")) === 'quickBtn');
+
+        /* Enter in edit mode on a middle field closes the keyboard and moves
+           on: the next field arrives navigable, so no keyboard pops up. */
+        await press('ArrowLeft', 39);
+        await press('ArrowUp', 38);
+        await press('ArrowUp', 38);
+        check('up walks back to the username field',
+            (await evaluate("document.activeElement.id")) === 'username');
+        await press('Enter', 13);
+        await sleep(120);
+        check('OK on username starts editing',
+            (await evaluate("document.querySelector('#username').readOnly")) === false);
+        await press('Enter', 13);
+        await sleep(120);
+        check('Enter on username moves to password without a keyboard',
+            (await evaluate("document.activeElement.id === 'password' &&" +
+                " document.querySelector('#password').readOnly &&" +
+                " document.querySelector('#username').readOnly")) === true);
 
         /* Discover talks to Seerr directly: the dev server serves a mock of it
            under /seerr, and the address and key come from Settings. Configured
@@ -922,6 +967,38 @@ async function main() {
         check('search knows whether Seerr is available',
             /library and Seerr/.test(await evaluate("document.querySelector('#searchInput').placeholder")));
 
+        await waitFor("document.activeElement && document.activeElement.id === 'searchInput'",
+            'search field focus');
+        check('the search field is readonly until OK',
+            (await evaluate("document.querySelector('#searchInput').readOnly")) === true);
+        await press('Enter', 13);
+        await sleep(120);
+        check('OK starts editing the search field',
+            (await evaluate("var i=document.querySelector('#searchInput');" +
+                " i.readOnly === false && document.activeElement === i")) === true);
+        await press('Enter', 13);
+        await sleep(120);
+        check('Enter stops editing and keeps focus on the search field',
+            (await evaluate("var i=document.querySelector('#searchInput');" +
+                " i.readOnly === true && document.activeElement === i")) === true);
+        await press('ArrowDown', 40);
+        check('down from the search field reaches the Search button',
+            (await evaluate("document.activeElement.getAttribute('data-key')")) === 'search-go');
+
+        /* BACK closes the keyboard but stays on the field; a mouse click on a
+           readonly field starts editing too (the desktop path). */
+        await evaluate("U.focusNode(document.querySelector('#searchInput')); true");
+        await press('Enter', 13);
+        await sleep(120);
+        await press('Unidentified', 10009);
+        await sleep(120);
+        check('BACK while editing closes the keyboard and keeps the field',
+            (await evaluate("var i=document.querySelector('#searchInput');" +
+                " i.readOnly === true && document.activeElement === i && !!document.querySelector('.search-results')")) === true);
+        await evaluate("document.querySelector('#searchInput').click(); true");
+        check('clicking a readonly field starts editing',
+            (await evaluate("document.querySelector('#searchInput').readOnly")) === false);
+
         await evaluate("var i = document.querySelector('#searchInput'); i.value = 'matrix';" +
             " i.dispatchEvent(new Event('input', { bubbles: true })); true");
         await waitFor("!!document.querySelector('.search-results .remote-card')", 'Seerr search hit');
@@ -962,6 +1039,14 @@ async function main() {
         /* Option: Jellyfin password. A wrong one stays on the prompt. */
         await clickButton('Use Jellyfin Password');
         await waitFor("!!document.querySelector('#seerrInput')", 'password prompt');
+        await waitFor("document.activeElement && document.activeElement.id === 'seerrInput'",
+            'Seerr field focus');
+        check('the Seerr field is readonly until OK',
+            (await evaluate("document.querySelector('#seerrInput').readOnly")) === true);
+        await press('Enter', 13);
+        await sleep(120);
+        check('OK on the Seerr field raises the keyboard layout',
+            (await evaluate("document.querySelector('.screen.setup').classList.contains('typing')")) === true);
         check('the password prompt keeps its field in the top half, above the TV keyboard',
             (await evaluate("document.querySelector('#seerrInput').getBoundingClientRect().bottom")) < 540);
         expect401 = true;   /* the wrong password deliberately gets a 401 */
@@ -1107,8 +1192,8 @@ async function main() {
         await waitFor("!!document.querySelector('#serverUrl')", 'server form after add account');
 
         /* Backing out of "Add account" must not leave the live session with
-           the empty token the server probe installed. */
-        await press('Unidentified', 10009);
+           the empty token the server probe installed. The focused field is
+           readonly now, so one BACK is a real BACK. */
         await press('Unidentified', 10009);
         await waitFor("(document.querySelector('h1.title') || {}).textContent === 'Settings'",
             'settings after backing out of add account');
@@ -1125,7 +1210,11 @@ async function main() {
         await waitFor("!!document.querySelector('#username')", 'login for the second account');
         await evaluate("document.querySelector('#username').value='alex';" +
             " document.querySelector('#password').value='dev';" +
-            " document.querySelector('#loginBtn').click(); true");
+            " U.focusNode(document.querySelector('#password')); true");
+        /* Enter in edit mode on the last field still signs in. */
+        await press('Enter', 13);
+        await sleep(120);
+        await press('Enter', 13);
         await waitFor("Store.accounts().length === 2 && Store.auth().userName === 'alex'",
             'second account signed in');
         check('a second account signs in without losing the first',

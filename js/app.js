@@ -118,8 +118,11 @@
 
     /* --------------------------------------------------------------- keys */
 
+    /* "Typing" means the field is in edit mode (readonly removed). A focused
+       but readonly field is an ordinary focusable: arrows navigate and OK
+       starts editing, so moving through a form never raises the TV keyboard. */
     function isTextInput(node) {
-        return !!node && node.tagName === 'INPUT';
+        return UI.textField.isEditing(node);
     }
 
     function bindKeys() {

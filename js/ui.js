@@ -59,6 +59,72 @@
         return node;
     }
 
+    /* A TV text field is navigable first and editable second: the on-screen
+       keyboard opens only when the viewer presses OK on it, never because
+       focus merely landed there. While readonly it behaves like any other
+       focusable for arrows; OK/Enter starts editing. */
+    function textField(input, opts) {
+        var o = opts || {};
+
+        function editing() { return !input.readOnly; }
+
+        function start() {
+            if (editing()) return;
+            input.readOnly = false;
+            try { input.focus(); } catch (e) { /* detached node */ }
+            /* Tizen decides whether to raise the IME from the focus event,
+               which can run before the readonly flip lands: focus again once
+               the property has settled. */
+            setTimeout(function () {
+                if (editing() && document.activeElement === input) input.focus();
+            }, 60);
+            if (o.onStart) o.onStart(input);
+        }
+
+        function stop() {
+            if (!editing()) return;
+            input.readOnly = true;
+            if (o.onStop) o.onStop(input);
+        }
+
+        input.readOnly = true;
+        input.addEventListener('keydown', function (event) {
+            var code = event.keyCode;
+            if (code === 13) {
+                /* Editing: OK/Done closes the keyboard and the screen's own
+                   Enter handler (submit, next field) still runs. Stop the
+                   document-level Enter from also clicking whatever the screen
+                   focused next. */
+                if (editing()) { event.stopPropagation(); stop(); return; }
+                /* Only focused: OK opens the keyboard, and must not submit. */
+                event.preventDefault();
+                event.stopImmediatePropagation();
+                start();
+                return;
+            }
+            /* BACK closes the keyboard without leaving the field. */
+            if (editing() && (code === 10009 || code === 27)) {
+                event.preventDefault();
+                event.stopPropagation();
+                stop();
+            }
+        });
+        input.addEventListener('click', start);
+        /* Focus left the field (Down, a click elsewhere, a rebuilt screen): it
+           is navigable again, so the next focus does not raise the keyboard. */
+        input.addEventListener('blur', function () {
+            setTimeout(function () {
+                if (document.activeElement !== input) stop();
+            }, 0);
+        });
+
+        return input;
+    }
+
+    textField.isEditing = function (node) {
+        return !!node && node.tagName === 'INPUT' && node.readOnly === false;
+    };
+
     /* ------------------------------------------------------------- artwork */
 
     /* Landscape cards want a wide image; an episode's own still is the right
@@ -648,6 +714,7 @@
         clockText: clockText,
         startClock: startClock,
         focusable: focusable,
+        textField: textField,
         keyOf: keyOf,
         hueOf: hueOf,
         isFolder: isFolder,

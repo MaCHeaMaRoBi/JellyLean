@@ -23,7 +23,7 @@
             var auth = Store.auth();
             var mine = ++current;
 
-            var screen = U.el('div', 'screen setup typing');
+            var screen = U.el('div', 'screen setup');
             screen.appendChild(U.el('div', 'setup-glow'));
             var brand = U.el('div', 'setup-brand');
             var mark = U.el('div', 'wordmark');
@@ -45,6 +45,7 @@
 
             function show(html) {
                 U.clear(panel);
+                screen.classList.remove('typing');
                 var wrap = U.el('div', 'form-wrap');
                 wrap.innerHTML = html;
                 panel.appendChild(wrap);
@@ -76,6 +77,10 @@
                     '</div>');
 
                 var input = U.$('#seerrInput');
+                UI.textField(input, {
+                    onStart: function () { screen.classList.add('typing'); },
+                    onStop: function () { screen.classList.remove('typing'); }
+                });
                 var go = UI.iconize(U.$('#seerrGo'), 'check', spec.button);
                 UI.iconize(U.$('#seerrCancel'), 'back', 'Cancel');
                 var busy = false;
