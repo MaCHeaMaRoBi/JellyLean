@@ -59,6 +59,72 @@
         return node;
     }
 
+    /* A TV text field is navigable first and editable second: the on-screen
+       keyboard opens only when the viewer presses OK on it, never because
+       focus merely landed there. While readonly it behaves like any other
+       focusable for arrows; OK/Enter starts editing. */
+    function textField(input, opts) {
+        var o = opts || {};
+
+        function editing() { return !input.readOnly; }
+
+        function start() {
+            if (editing()) return;
+            input.readOnly = false;
+            try { input.focus(); } catch (e) { /* detached node */ }
+            /* Tizen decides whether to raise the IME from the focus event,
+               which can run before the readonly flip lands: focus again once
+               the property has settled. */
+            setTimeout(function () {
+                if (editing() && document.activeElement === input) input.focus();
+            }, 60);
+            if (o.onStart) o.onStart(input);
+        }
+
+        function stop() {
+            if (!editing()) return;
+            input.readOnly = true;
+            if (o.onStop) o.onStop(input);
+        }
+
+        input.readOnly = true;
+        input.addEventListener('keydown', function (event) {
+            var code = event.keyCode;
+            if (code === 13) {
+                /* Editing: OK/Done closes the keyboard and the screen's own
+                   Enter handler (submit, next field) still runs. Stop the
+                   document-level Enter from also clicking whatever the screen
+                   focused next. */
+                if (editing()) { event.stopPropagation(); stop(); return; }
+                /* Only focused: OK opens the keyboard, and must not submit. */
+                event.preventDefault();
+                event.stopImmediatePropagation();
+                start();
+                return;
+            }
+            /* BACK closes the keyboard without leaving the field. */
+            if (editing() && (code === 10009 || code === 27)) {
+                event.preventDefault();
+                event.stopPropagation();
+                stop();
+            }
+        });
+        input.addEventListener('click', start);
+        /* Focus left the field (Down, a click elsewhere, a rebuilt screen): it
+           is navigable again, so the next focus does not raise the keyboard. */
+        input.addEventListener('blur', function () {
+            setTimeout(function () {
+                if (document.activeElement !== input) stop();
+            }, 0);
+        });
+
+        return input;
+    }
+
+    textField.isEditing = function (node) {
+        return !!node && node.tagName === 'INPUT' && node.readOnly === false;
+    };
+
     /* ------------------------------------------------------------- artwork */
 
     /* Landscape cards want a wide image; an episode's own still is the right
@@ -79,42 +145,60 @@
 
     function posterUrl(item, landscape) {
         if (!item) return '';
-        if (landscape) return landscapeUrl(item, 480);
-        if (item.ImageTags && item.ImageTags.Primary) return Api.imageUrl(item, 'Primary', 320);
+        if (landscape) return landscapeUrl(item, 440);
+        if (item.ImageTags && item.ImageTags.Primary) return Api.imageUrl(item, 'Primary', 288, 432);
         return '';
     }
 
     /* The widest picture that belongs to an item, for the stage and details. */
     function backdropUrl(item, width) {
         if (!item) return '';
-        var w = width || 1280;
-        if (item.BackdropImageTags && item.BackdropImageTags.length) return Api.imageUrl(item, 'Backdrop', w);
+        var w = width || 1920;
+        if (item.BackdropImageTags && item.BackdropImageTags.length) return Api.imageUrl(item, 'Backdrop', w, 1080);
         if (item.ParentBackdropItemId && item.ParentBackdropImageTags && item.ParentBackdropImageTags.length) {
-            return Api.imageById(item.ParentBackdropItemId, 'Backdrop', w, item.ParentBackdropImageTags[0]);
+            return Api.imageById(item.ParentBackdropItemId, 'Backdrop', w, item.ParentBackdropImageTags[0], 1080);
         }
-        if (item.ImageTags && item.ImageTags.Thumb) return Api.imageUrl(item, 'Thumb', w);
-        if (item.ImageTags && item.ImageTags.Primary && item.Type === 'Episode') return Api.imageUrl(item, 'Primary', w);
+        if (item.ImageTags && item.ImageTags.Thumb) return Api.imageUrl(item, 'Thumb', w, 1080);
+        if (item.ImageTags && item.ImageTags.Primary && item.Type === 'Episode') return Api.imageUrl(item, 'Primary', w, 1080);
         return '';
     }
 
     function logoUrl(item) {
         if (!item) return '';
-        if (item.ImageTags && item.ImageTags.Logo) return Api.imageUrl(item, 'Logo', 720);
+        if (item.ImageTags && item.ImageTags.Logo) return Api.imageUrl(item, 'Logo', 700, 168);
         if (item.ParentLogoItemId && item.ParentLogoImageTag) {
-            return Api.imageById(item.ParentLogoItemId, 'Logo', 720, item.ParentLogoImageTag);
+            return Api.imageById(item.ParentLogoItemId, 'Logo', 700, item.ParentLogoImageTag, 168);
         }
         return '';
     }
 
+    /* Jellyfin re-encodes on request; WebP is smaller and the TV engine
+       decodes it. If that ever fails, lazyImage retries the original. */
+    function webpUrl(url) {
+        if (!url || url.indexOf('/Images/') === -1 || /[?&]format=/i.test(url)) return url;
+        return url + (url.indexOf('?') === -1 ? '?' : '&') + 'format=webp';
+    }
+
+    function withoutWebp(url) {
+        return String(url || '')
+            .replace(/([?&])format=webp&/i, '$1')
+            .replace(/[?&]format=webp$/i, '');
+    }
+
     /* Artwork is lazy: only data-src is written here, util.js promotes it to src
        when the card nears the viewport. A failed image falls back to the
-       typographic placeholder. */
-    function lazyImage(url, fallbackText, clip) {
+       original format, then to the typographic placeholder. */
+    function lazyImage(url, fallbackText, clip, onFail) {
         var img = document.createElement('img');
         img.alt = '';
-        img.setAttribute('data-src', url);
+        img.setAttribute('data-lazy', '');
+        img.setAttribute('data-src', webpUrl(url));
         img.onload = function () { img.className = 'loaded'; };
         img.onerror = function () {
+            var src = img.getAttribute('src') || '';
+            var retry = withoutWebp(src);
+            if (retry !== src) { img.src = retry; return; }
+            if (onFail) { onFail(img); return; }
             if (img.parentNode) img.parentNode.removeChild(img);
             if (clip) clip.insertBefore(placeholder(fallbackText), clip.firstChild);
         };
@@ -377,12 +461,15 @@
             var img = document.createElement('img');
             img.alt = item.Name || '';
             img.className = 'logo';
+            var src = webpUrl(url);
             img.onerror = function () {
+                var retry = withoutWebp(src);
+                if (retry !== src) { src = retry; img.src = retry; return; }
                 if (img.parentNode) img.parentNode.removeChild(img);
                 node.className = node.className.replace(' has-logo', '');
                 node.textContent = item.Name || '';
             };
-            img.src = url;
+            img.src = src;
             node.appendChild(img);
         } else {
             node.textContent = item.Name || 'Untitled';
@@ -648,12 +735,15 @@
         clockText: clockText,
         startClock: startClock,
         focusable: focusable,
+        textField: textField,
         keyOf: keyOf,
         hueOf: hueOf,
         isFolder: isFolder,
         episodeTag: episodeTag,
         backdropUrl: backdropUrl,
         logoUrl: logoUrl,
+        webpUrl: webpUrl,
+        withoutWebp: withoutWebp,
         placeholder: placeholder,
         lazyImage: lazyImage,
         setAttrs: setAttrs

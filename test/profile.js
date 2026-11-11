@@ -297,8 +297,8 @@ test('a missing language on either side does not block the mapping', function ()
 /* The stall watchdog: a slow NAS start must not be called a dead stream, and
    a dead low-bitrate stream must not hold the viewer for 12 s. */
 test('the stall limit scales with the bitrate', function () {
-    assert.strictEqual(U.stallLimitMs(0), 8000, 'no bitrate: the minimum');
-    assert.strictEqual(U.stallLimitMs(2000000), 8000, 'a small episode fails fast');
+    assert.strictEqual(U.stallLimitMs(0), 12000, 'no bitrate: the minimum');
+    assert.strictEqual(U.stallLimitMs(2000000), 12000, 'a small episode waits for a slow disk');
     assert.strictEqual(U.stallLimitMs(10000000), 15000);
     assert.strictEqual(U.stallLimitMs(20000000), 25000);
     assert.strictEqual(U.stallLimitMs(40000000), 45000, 'a big remux gets patience');

@@ -21,7 +21,7 @@
             var head = U.el('div', 'page-head');
             var titles = U.el('div', 'grow');
             titles.appendChild(U.el('h1', 'title', 'Search'));
-            var status = U.el('div', 'count', 'Type a title, then press OK');
+            var status = U.el('div', 'count', 'Press OK to type, then OK to search');
             status.setAttribute('aria-live', 'polite');
             titles.appendChild(status);
             head.appendChild(titles);
@@ -38,6 +38,7 @@
             input.setAttribute('data-focusable', '');
             input.setAttribute('data-row', 'field');
             input.setAttribute('data-key', 'search-input');
+            UI.textField(input);
             form.appendChild(input);
             shell.scroll.appendChild(form);
 

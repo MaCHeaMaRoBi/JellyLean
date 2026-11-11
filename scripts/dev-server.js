@@ -20,6 +20,13 @@ var SAMPLE = path.join(MEDIA_DIR, 'sample.mp4');
 var USER = { Id: 'user1', Name: 'Dev' };
 var TOKEN = 'devtoken';
 
+/* The mock signs in whoever types their name, so the smoke test can add a
+   second account and switch between them. All of them share one token. */
+function userNamed(name) {
+    var clean = String(name || 'Dev').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 24) || 'Dev';
+    return { Id: 'user-' + clean.toLowerCase(), Name: clean };
+}
+
 var MOVIE_STREAMS = [
     { Type: 'Video', Codec: 'h264', Profile: 'High', Width: 1920, Height: 1080, BitDepth: 8,
         VideoRangeType: 'SDR', AverageFrameRate: 24 },
@@ -574,6 +581,7 @@ async function handleApi(req, res, url) {
     if (pathname === '/Users/AuthenticateByName' && method === 'POST') {
         var body = await readBody(req);
         if (!body.Username) { json(res, 401, { Message: 'Username required' }); return true; }
+        USER = userNamed(body.Username);
         json(res, 200, { AccessToken: TOKEN, ServerId: 'devserver', User: USER });
         return true;
     }
@@ -599,17 +607,17 @@ async function handleApi(req, res, url) {
     if (pathname === '/Users/Me') { json(res, 200, USER); return true; }
     if (pathname === '/Sessions/Logout' && method === 'POST') { noContent(res); return true; }
 
-    if (pathname === '/Users/' + USER.Id + '/Views') {
+    if (/^\/Users\/[^/]+\/Views$/.test(pathname)) {
         json(res, 200, { Items: [MOVIES_LIB, TV_LIB], TotalRecordCount: 2 });
         return true;
     }
 
-    if (pathname === '/Users/' + USER.Id + '/Items/Resume') {
+    if (/^\/Users\/[^/]+\/Items\/Resume$/.test(pathname)) {
         json(res, 200, { Items: RICH_RESUME, TotalRecordCount: RICH_RESUME.length });
         return true;
     }
 
-    if (pathname === '/Users/' + USER.Id + '/Items/Latest') {
+    if (/^\/Users\/[^/]+\/Items\/Latest$/.test(pathname)) {
         var parent = url.searchParams.get('ParentId');
         if (parent === TV_LIB.Id) { json(res, 200, [SERIES].concat(RICH_SERIES).slice(0, 14)); return true; }
         if (parent === MOVIES_LIB.Id) { json(res, 200, [MOVIE].concat(RICH_MOVIES).slice(0, 14)); return true; }
@@ -617,7 +625,7 @@ async function handleApi(req, res, url) {
         return true;
     }
 
-    if (pathname === '/Users/' + USER.Id + '/Items' && method === 'GET') {
+    if (/^\/Users\/[^/]+\/Items$/.test(pathname) && method === 'GET') {
         var parentId = url.searchParams.get('ParentId');
         var items;
         if (parentId === MOVIES_LIB.Id) items = [MOVIE].concat(RICH_MOVIES);

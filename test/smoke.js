@@ -247,13 +247,35 @@ async function main() {
         check('setup screen renders', true);
         await capture('01-setup');
 
-        /* The TV's on-screen keyboard holds focus in the text field. Arrows must
-           still reach the buttons, otherwise Connect can never be pressed. */
-        await evaluate("var i=document.querySelector('#serverUrl'); i.value=''; i.focus(); true");
-        await sleep(150);
+        /* The TV's on-screen keyboard opens on focus, so a field stays readonly
+           until OK is pressed on it: moving through the form must not pop it up. */
+        await waitFor("document.activeElement && document.activeElement.id === 'serverUrl'",
+            'server field focus');
+        check('the focused server field is readonly',
+            (await evaluate("document.querySelector('#serverUrl').readOnly")) === true);
+        check('the keyboard layout stays away until editing',
+            (await evaluate("document.querySelector('.screen.setup').classList.contains('typing')")) === false);
+        await press('ArrowRight', 39);
+        await press('ArrowLeft', 37);
+        check('left/right leave the field navigable',
+            (await evaluate("document.querySelector('#serverUrl').readOnly &&" +
+                " document.activeElement.id === 'serverUrl'")) === true);
+        await press('Enter', 13);
+        await sleep(120);
+        check('OK on the field starts editing',
+            (await evaluate("var i=document.querySelector('#serverUrl');" +
+                " i.readOnly === false && document.activeElement === i")) === true);
+        check('editing raises the keyboard layout',
+            (await evaluate("document.querySelector('.screen.setup').classList.contains('typing')")) === true);
+        await evaluate("document.querySelector('#serverUrl').value=''; true");
         await press('ArrowDown', 40);
+        await sleep(120);
         check('down from the field focuses Connect',
             (await evaluate("document.activeElement.id")) === 'connectBtn');
+        check('leaving the field makes it readonly again',
+            (await evaluate("document.querySelector('#serverUrl').readOnly")) === true);
+        check('the keyboard layout drops with the field',
+            (await evaluate("document.querySelector('.screen.setup').classList.contains('typing')")) === false);
 
         check('setup actions carry icons',
             (await evaluate("document.querySelectorAll('#connectBtn svg.icon').length")) === 1);
@@ -262,7 +284,9 @@ async function main() {
             (await evaluate("document.activeElement.id")) === 'serverUrl');
 
         await evaluate("document.querySelector('#serverUrl').value='localhost:" + PORT + "'; true");
-        await press('ArrowDown', 40);
+        /* Enter in edit mode still connects, as it always did. */
+        await press('Enter', 13);
+        await sleep(120);
         await press('Enter', 13);
 
         await waitFor("!!document.querySelector('#username')", 'login step');
@@ -271,6 +295,8 @@ async function main() {
            would send Down to whatever still owned focus. */
         await waitFor("document.activeElement && document.activeElement.id === 'username'",
             'username focus');
+        check('the username field arrives readonly',
+            (await evaluate("document.querySelector('#username').readOnly")) === true);
 
         await press('ArrowDown', 40);
         check('down moves username to password',
@@ -282,13 +308,32 @@ async function main() {
         check('right reaches Quick Connect',
             (await evaluate("document.activeElement.id")) === 'quickBtn');
 
+        /* Enter in edit mode on a middle field closes the keyboard and moves
+           on: the next field arrives navigable, so no keyboard pops up. */
+        await press('ArrowLeft', 39);
+        await press('ArrowUp', 38);
+        await press('ArrowUp', 38);
+        check('up walks back to the username field',
+            (await evaluate("document.activeElement.id")) === 'username');
+        await press('Enter', 13);
+        await sleep(120);
+        check('OK on username starts editing',
+            (await evaluate("document.querySelector('#username').readOnly")) === false);
+        await press('Enter', 13);
+        await sleep(120);
+        check('Enter on username moves to password without a keyboard',
+            (await evaluate("document.activeElement.id === 'password' &&" +
+                " document.querySelector('#password').readOnly &&" +
+                " document.querySelector('#username').readOnly")) === true);
+
         /* Discover talks to Seerr directly: the dev server serves a mock of it
-           under /seerr, and the address and key come from Settings. */
+           under /seerr, and the address and key come from Settings. Configured
+           before the sign-in to exercise the pre-login prefs adoption. */
         await evaluate("Seerr.configure(location.origin + '/seerr', 'dev-key'); true");
 
         await evaluate("document.querySelector('#username').value='dev';" +
             "document.querySelector('#password').value='dev';" +
-            "document.querySelector('#loginBtn').click(); true");
+            " document.querySelector('#loginBtn').click(); true");
 
         await waitFor("document.querySelectorAll('.row .card').length > 0", 'home rows');
         var rowTitles = await evaluate(
@@ -321,6 +366,13 @@ async function main() {
         check('every card image asks for a sized render', art.length > 0 && unsized.length === 0,
             unsized.length + ' of ' + art.length + ' unsized: ' + unsized.slice(0, 3).join(' | '));
         check('no card image asks for more than 1600 px', widest <= 1600, widest + ' px');
+        check('card artwork asks for WebP',
+            art.every(function (src) { return /[?&]format=webp/.test(src); }),
+            art.filter(function (src) { return !/[?&]format=webp/.test(src); }).slice(0, 2).join(' | '));
+        check('a failed WebP retries the original format',
+            (await evaluate("UI.withoutWebp(UI.webpUrl(" +
+                "'http://h/Items/1/Images/Primary?maxWidth=288&quality=84'))")) ===
+            'http://h/Items/1/Images/Primary?maxWidth=288&quality=84');
 
         /* The hero only appears when something is resumable, and the mock
            catalogue has no history. Stub one item in to exercise that path. */
@@ -922,6 +974,38 @@ async function main() {
         check('search knows whether Seerr is available',
             /library and Seerr/.test(await evaluate("document.querySelector('#searchInput').placeholder")));
 
+        await waitFor("document.activeElement && document.activeElement.id === 'searchInput'",
+            'search field focus');
+        check('the search field is readonly until OK',
+            (await evaluate("document.querySelector('#searchInput').readOnly")) === true);
+        await press('Enter', 13);
+        await sleep(120);
+        check('OK starts editing the search field',
+            (await evaluate("var i=document.querySelector('#searchInput');" +
+                " i.readOnly === false && document.activeElement === i")) === true);
+        await press('Enter', 13);
+        await sleep(120);
+        check('Enter stops editing and keeps focus on the search field',
+            (await evaluate("var i=document.querySelector('#searchInput');" +
+                " i.readOnly === true && document.activeElement === i")) === true);
+        await press('ArrowDown', 40);
+        check('down from the search field reaches the Search button',
+            (await evaluate("document.activeElement.getAttribute('data-key')")) === 'search-go');
+
+        /* BACK closes the keyboard but stays on the field; a mouse click on a
+           readonly field starts editing too (the desktop path). */
+        await evaluate("U.focusNode(document.querySelector('#searchInput')); true");
+        await press('Enter', 13);
+        await sleep(120);
+        await press('Unidentified', 10009);
+        await sleep(120);
+        check('BACK while editing closes the keyboard and keeps the field',
+            (await evaluate("var i=document.querySelector('#searchInput');" +
+                " i.readOnly === true && document.activeElement === i && !!document.querySelector('.search-results')")) === true);
+        await evaluate("document.querySelector('#searchInput').click(); true");
+        check('clicking a readonly field starts editing',
+            (await evaluate("document.querySelector('#searchInput').readOnly")) === false);
+
         await evaluate("var i = document.querySelector('#searchInput'); i.value = 'matrix';" +
             " i.dispatchEvent(new Event('input', { bubbles: true })); true");
         await waitFor("!!document.querySelector('.search-results .remote-card')", 'Seerr search hit');
@@ -962,6 +1046,14 @@ async function main() {
         /* Option: Jellyfin password. A wrong one stays on the prompt. */
         await clickButton('Use Jellyfin Password');
         await waitFor("!!document.querySelector('#seerrInput')", 'password prompt');
+        await waitFor("document.activeElement && document.activeElement.id === 'seerrInput'",
+            'Seerr field focus');
+        check('the Seerr field is readonly until OK',
+            (await evaluate("document.querySelector('#seerrInput').readOnly")) === true);
+        await press('Enter', 13);
+        await sleep(120);
+        check('OK on the Seerr field raises the keyboard layout',
+            (await evaluate("document.querySelector('.screen.setup').classList.contains('typing')")) === true);
         check('the password prompt keeps its field in the top half, above the TV keyboard',
             (await evaluate("document.querySelector('#seerrInput').getBoundingClientRect().bottom")) < 540);
         expect401 = true;   /* the wrong password deliberately gets a 401 */
@@ -1092,20 +1184,86 @@ async function main() {
         check('no transcode bitrate setting', qualityRow === false);
         await capture('07-settings');
 
+        /* ---------------------------------------------- two users, one TV */
+
+        await clickButton('Switch user');
+        await waitFor("!!document.querySelector('.account-card')", 'account picker');
+        check('the picker lists the signed-in account and an add card',
+            (await evaluate("document.querySelectorAll('.account-card').length")) === 2 &&
+            /dev/i.test(await evaluate("document.body.innerText")));
+        check('the picker is not the server form',
+            (await evaluate("!document.querySelector('#serverUrl')")) === true);
+
+        await evaluate("Array.prototype.filter.call(document.querySelectorAll('.account-card')," +
+            " function (b) { return b.className.indexOf('add') !== -1; })[0].click(); true");
+        await waitFor("!!document.querySelector('#serverUrl')", 'server form after add account');
+
+        /* Backing out of "Add account" must not leave the live session with
+           the empty token the server probe installed. The focused field is
+           readonly now, so one BACK is a real BACK. */
+        await press('Unidentified', 10009);
+        await waitFor("(document.querySelector('h1.title') || {}).textContent === 'Settings'",
+            'settings after backing out of add account');
+        check('backing out of add account restores the live session',
+            await evaluate("Api.token === Store.auth().token && !!Api.token"));
+
+        await clickButton('Switch user');
+        await waitFor("!!document.querySelector('.account-card')", 'picker again');
+        await evaluate("Array.prototype.filter.call(document.querySelectorAll('.account-card')," +
+            " function (b) { return b.className.indexOf('add') !== -1; })[0].click(); true");
+        await waitFor("!!document.querySelector('#serverUrl')", 'server form after add account');
+        await evaluate("document.querySelector('#serverUrl').value='localhost:" + PORT + "'; true");
+        await evaluate("document.querySelector('#connectBtn').click(); true");
+        await waitFor("!!document.querySelector('#username')", 'login for the second account');
+        await evaluate("document.querySelector('#username').value='alex';" +
+            " document.querySelector('#password').value='dev';" +
+            " U.focusNode(document.querySelector('#password')); true");
+        /* Enter in edit mode on the last field still signs in. */
+        await press('Enter', 13);
+        await sleep(120);
+        await press('Enter', 13);
+        await waitFor("Store.accounts().length === 2 && Store.auth().userName === 'alex'",
+            'second account signed in');
+        check('a second account signs in without losing the first',
+            (await evaluate("Store.accounts().map(function (a) { return a.userName; }).sort().join(',')")) ===
+            'alex,dev');
+
+        await evaluate("App.go('settings'); true");
+        await waitFor("(document.querySelector('h1.title') || {}).textContent === 'Settings'",
+            'settings for the second user');
+        await clickButton('Switch user');
+        await waitFor("!!document.querySelector('.account-card')", 'picker with two accounts');
+        check('the picker shows both accounts plus add',
+            (await evaluate("document.querySelectorAll('.account-card').length")) === 3);
+        await capture('08-accounts');
+        await evaluate("Array.prototype.filter.call(document.querySelectorAll('.account-card')," +
+            " function (b) { return /dev/i.test(b.textContent); })[0].click(); true");
+        await waitFor("Store.auth().userName === 'dev'", 'switched back to dev');
+        check('switching restores the other account',
+            await evaluate("Api.token === Store.auth().token && Store.isLoggedIn()"));
+
         /* ------------------------------------------------------------ 401 */
 
-        /* A dead token anywhere must return to setup instead of leaving every
-           screen stuck on "HTTP 401". Done last because it signs the app out. */
+        /* A dead token anywhere must return to the picker instead of leaving
+           every screen stuck on "HTTP 401". Done last because it signs the
+           active account out. */
         expect401 = true;
         await evaluate("Store.setPref('seerrKey', 'secret'); Store.setPref('seerrMode', 'key'); true");
-        await evaluate("Api.configure({ serverUrl: App && Store.auth().serverUrl," +
+        await evaluate("Api.configure({ serverUrl: Store.auth().serverUrl," +
             " token: 'expired-token', userId: Store.auth().userId," +
             " deviceId: Store.deviceId() }); Api.views().catch(function () {}); true");
-        await waitFor("!!document.querySelector('#serverUrl')", 'setup after a 401');
-        check('a 401 clears the session and returns to setup', true);
+        await waitFor("!!document.querySelector('.account-card')", 'picker after a 401');
+        check('a 401 drops only the failing account and offers the picker',
+            (await evaluate("Store.accounts().length")) === 1 &&
+            (await evaluate("Store.accounts()[0].userName")) === 'alex');
         check('the dead token is not kept', await evaluate("!Store.isLoggedIn()"));
-        check('a 401 also forgets the Seerr connection',
+        check('a 401 also forgets the failing account\'s Seerr connection',
             await evaluate("!Store.pref('seerrKey') && !Store.pref('seerrMode')"));
+
+        /* With nobody left, setup falls back to the server form. */
+        await evaluate("Store.removeAccount(Store.accounts()[0].id); App.go('setup', {}, true); true");
+        await waitFor("!!document.querySelector('#serverUrl')", 'setup after the last account');
+        check('setup returns to the server form when no account remains', true);
 
         await sleep(300);
 

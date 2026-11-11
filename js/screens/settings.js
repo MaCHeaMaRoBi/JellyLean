@@ -286,6 +286,12 @@
                     U.toast('Server unreachable: ' + (err.message || 'error'));
                 });
             };
+            var switchUser = UI.button({
+                label: 'Switch user', icon: 'users', key: 'set-switch-user'
+            });
+            switchUser.onclick = function () {
+                App.go('setup', { picker: true });
+            };
             var signOut = UI.button({
                 label: 'Sign Out', icon: 'logout', key: 'set-signout'
             });
@@ -304,7 +310,7 @@
                     signOut.setAttribute('aria-label', 'Sign Out');
                 }, 4000);
             };
-            page.appendChild(UI.buttonRow([checkBtn, signOut], { className: 'pad' }));
+            page.appendChild(UI.buttonRow([checkBtn, switchUser, signOut], { className: 'pad' }));
             page.appendChild(U.el('div', 'shelf-end'));
 
             U.focusFirst(container);

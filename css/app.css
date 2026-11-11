@@ -732,6 +732,57 @@ h1, h2, h3, p { margin: 0; }
 
 .form-sub b { color: #f4f7fa; font-weight: 600; }
 
+/* Account picker: remote-first cards, one focus stop each. */
+.account-grid { display: flex; flex-wrap: wrap; margin-top: 8px; }
+
+.account-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 232px;
+    margin: 0 24px 24px 0;
+    padding: 28px 20px 24px;
+    border: 0;
+    border-radius: 20px;
+    background: #121822;
+    color: #f4f7fa;
+    font: inherit;
+    text-align: center;
+    outline: none;
+    -webkit-transition: background 160ms ease, -webkit-transform 160ms ease;
+    transition: background 160ms ease, transform 160ms ease;
+}
+
+.account-card:focus { background: #1a2230; -webkit-transform: scale(1.06); transform: scale(1.06); }
+
+.account-initial {
+    width: 88px;
+    height: 88px;
+    margin-bottom: 20px;
+    border-radius: 44px;
+    background: #1a2230;
+    color: #4fe3c8;
+    font-family: "JL Display", "JL Sans", sans-serif;
+    font-size: 40px;
+    font-weight: 700;
+    line-height: 88px;
+}
+
+.account-name { font-size: 28px; font-weight: 700; line-height: 1.2; }
+
+.account-server {
+    margin-top: 8px;
+    color: #8c99a9;
+    font-size: 24px;
+    line-height: 1.3;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+}
+
+.account-card.add .account-initial { color: #b4becb; }
+
 .code-big {
     margin: 24px 0 16px;
     font-family: "JL Display", "JL Sans", sans-serif;

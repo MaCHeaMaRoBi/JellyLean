@@ -54,11 +54,13 @@
     /* How long a stream gets to produce its first frame before it is called
        dead. A slow NAS and a dead stream look the same at first; only the bytes
        still to arrive differ, so budget the wait from the bitrate: 8 s of video
-       at a pessimistic 1 MB/s, plus 5 s of fixed overhead. A 2 Mbps episode
-       gives up in ~8 s, a 40 Mbps remux is allowed ~45 s. `floorMs` keeps a
-       caller's minimum (a cold transcode needs longer than its bitrate says). */
+       at a pessimistic 1 MB/s, plus 5 s of fixed overhead. The 12 s floor is
+       the old direct-play limit: a NAS spinning its disks up can take that
+       long, and must not be failed early. A 40 Mbps remux gets ~45 s.
+       `floorMs` keeps a caller's minimum (a cold transcode needs longer than
+       its bitrate says). */
     function stallLimitMs(bitrate, floorMs) {
-        var ms = clamp(5000 + (bitrate || 0) / 1000, 8000, 45000);
+        var ms = clamp(5000 + (bitrate || 0) / 1000, 12000, 45000);
         return Math.max(floorMs || 0, ms);
     }
 
@@ -266,6 +268,10 @@
     var lazyTimer = null;
     var LAZY_X = 1500;
     var LAZY_Y = 1300;
+    /* Images further out than this are dropped again: a 300-title shelf would
+       otherwise keep every decoded bitmap alive for the whole session. */
+    var RELEASE_X = 3200;
+    var RELEASE_Y = 2600;
 
     function lazyCheck() {
         lazyTimer = null;
@@ -279,6 +285,17 @@
                 img.src = img.getAttribute('data-src');
                 img.removeAttribute('data-src');
             }
+        }
+
+        var loaded = $all('img[data-lazy][src]');
+        for (var j = 0; j < loaded.length; j++) {
+            var far = loaded[j];
+            var box = finalRect(far);
+            if (box.right > -RELEASE_X && box.left < 1920 + RELEASE_X &&
+                    box.bottom > -RELEASE_Y && box.top < 1080 + RELEASE_Y) continue;
+            far.setAttribute('data-src', far.getAttribute('src'));
+            far.removeAttribute('src');
+            far.className = '';
         }
     }
 

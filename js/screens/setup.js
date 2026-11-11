@@ -8,10 +8,75 @@
     var step = 'server';
     var pendingServer = null;
     var rootEl = null;
+    var screenEl = null;
+    /* True when the viewer reached the server step from the account picker, so
+       Back returns there instead of pretending the picker never existed. */
+    var fromPicker = false;
 
     function setError(message) {
         var node = U.$('#setupErr');
         if (node) node.textContent = message || '';
+    }
+
+    /* Every field starts navigable; the keyboard layout (and the keyboard) only
+       appears while one is being edited. */
+    function arm(input) {
+        return UI.textField(input, {
+            onStart: function () { if (screenEl) screenEl.classList.add('typing'); },
+            onStop: function () { if (screenEl) screenEl.classList.remove('typing'); }
+        });
+    }
+
+    function serverLabel(account) {
+        if (account.serverName) return account.serverName;
+        return String(account.serverUrl || '')
+            .replace(/^https?:\/\//i, '').replace(/\/.*$/, '') || 'Jellyfin';
+    }
+
+    function accountStep() {
+        var wrap = U.el('div', 'form-wrap');
+        wrap.innerHTML =
+            '<h1 class="form-title">Who\'s watching?</h1>' +
+            '<p class="form-sub hint">Choose your profile, or add another server.</p>';
+
+        var grid = U.el('div', 'account-grid');
+        grid.setAttribute('data-row', 'accounts');
+
+        var accounts = Store.accounts();
+        for (var i = 0; i < accounts.length; i++) {
+            var account = accounts[i];
+            var card = U.el('button', 'account-card');
+            card.type = 'button';
+            UI.focusable(card, (account.userName || 'Jellyfin user') + ' on ' + serverLabel(account));
+            card.setAttribute('data-key', 'account:' + account.id);
+            card.appendChild(U.el('span', 'account-initial',
+                String(account.userName || '?').charAt(0).toUpperCase()));
+            card.appendChild(U.el('span', 'account-name', account.userName || 'Jellyfin user'));
+            card.appendChild(U.el('span', 'account-server', serverLabel(account)));
+            card.onclick = (function (id) {
+                return function () { App.switchAccount(id); };
+            })(account.id);
+            grid.appendChild(card);
+        }
+
+        var add = U.el('button', 'account-card add');
+        add.type = 'button';
+        UI.focusable(add, 'Add account');
+        add.setAttribute('data-key', 'account:add');
+        add.appendChild(U.el('span', 'account-initial', '+'));
+        add.appendChild(U.el('span', 'account-name', 'Add account'));
+        add.appendChild(U.el('span', 'account-server', 'New login'));
+        add.onclick = function () {
+            fromPicker = true;
+            step = 'server';
+            render();
+        };
+        grid.appendChild(add);
+
+        wrap.appendChild(grid);
+        rootEl.appendChild(wrap);
+
+        setTimeout(function () { U.focusFirst(wrap); }, 60);
     }
 
     function serverStep() {
@@ -34,6 +99,7 @@
 
         var input = U.$('#serverUrl');
         input.value = Store.get('lastServer', '');
+        arm(input);
         var button = UI.iconize(U.$('#connectBtn'), 'check', 'Connect');
         var busy = false;
 
@@ -122,6 +188,8 @@
             password.setAttribute('autocorrect', 'off');
             password.setAttribute('spellcheck', 'false');
         }
+        arm(username);
+        arm(password);
         var loginBtn = UI.iconize(U.$('#loginBtn'), 'check', 'Sign In');
         UI.iconize(U.$('#quickBtn'), 'users', 'Quick Connect');
         UI.iconize(U.$('#backBtn'), 'back', 'Back');
@@ -136,6 +204,7 @@
             loginBtn.labelNode.textContent = 'Signing\u2026';
 
             Api.authenticate(username.value, password.value).then(function (result) {
+                result.serverName = pendingServer.name;
                 Store.saveAuth(result);
                 Api.configure({
                     serverUrl: result.serverUrl,
@@ -168,7 +237,10 @@
             }
         };
 
-        U.$('#backBtn').onclick = function () { step = 'server'; render(); };
+        U.$('#backBtn').onclick = function () {
+            step = fromPicker && Store.accounts().length ? 'accounts' : 'server';
+            render();
+        };
         U.$('#quickBtn').onclick = function () { step = 'quick'; render(); };
 
         setTimeout(function () { username.focus(); }, 60);
@@ -216,6 +288,7 @@
                     if (stopped) return;
                     if (status && status.Authenticated) {
                         Api.quickConnectAuthenticate(secret).then(function (auth) {
+                            auth.serverName = pendingServer.name;
                             Store.saveAuth(auth);
                             Api.configure({
                                 serverUrl: auth.serverUrl,
@@ -246,7 +319,9 @@
 
     function render() {
         U.clear(rootEl);
-        if (step === 'server' || !pendingServer) serverStep();
+        if (screenEl) screenEl.classList.remove('typing');
+        if (step === 'accounts') accountStep();
+        else if (step === 'server' || !pendingServer) serverStep();
         else if (step === 'login') loginStep();
         else quickStep();
     }
@@ -254,26 +329,14 @@
     window.Screens.setup = {
         render: function (container) {
             rootEl = container;
-            step = 'server';
+            /* Accounts already on this TV mean someone is signed in somewhere:
+               the picker comes first, and "Add account" leads to the form. */
+            step = Store.accounts().length ? 'accounts' : 'server';
+            fromPicker = false;
             pendingServer = null;
             var screen = U.el('div', 'screen setup');
+            screenEl = screen;
             screen.appendChild(U.el('div', 'setup-glow'));
-
-            /* While a text field is focused the TV keyboard covers the lower half
-               of the screen: pack the form into the top half so the field, and
-               what is typed in it, stay visible. */
-            function isTextField(node) {
-                return !!node && node.tagName === 'INPUT';
-            }
-            screen.addEventListener('focus', function (event) {
-                if (isTextField(event.target)) screen.classList.add('typing');
-            }, true);
-            screen.addEventListener('blur', function (event) {
-                if (!isTextField(event.target)) return;
-                setTimeout(function () {
-                    if (!isTextField(document.activeElement)) screen.classList.remove('typing');
-                }, 0);
-            }, true);
 
             var brand = U.el('div', 'setup-brand');
             var mark = U.el('div', 'wordmark');
@@ -292,6 +355,20 @@
 
         destroy: function () {
             if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; }
+
+            /* Adding an account probes a server, and that clears the token the
+               current session is using. Backing out to Settings must put the
+               old session back, or the next API call looks like a 401. */
+            var auth = Store.auth();
+            if (auth.token && Api.token !== auth.token) {
+                Api.configure({
+                    serverUrl: auth.serverUrl,
+                    token: auth.token,
+                    userId: auth.userId,
+                    deviceId: Store.deviceId(),
+                    deviceName: Store.deviceName()
+                });
+            }
         }
     };
 })(window);

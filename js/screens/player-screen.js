@@ -708,8 +708,8 @@
 
         var art = U.el('div', 'upnext-art');
         var image = next.ImageTags && next.ImageTags.Primary
-            ? Api.imageUrl(next, 'Primary', 480)
-            : (next.ImageTags && next.ImageTags.Thumb ? Api.imageUrl(next, 'Thumb', 480) : '');
+            ? Api.imageUrl(next, 'Primary', 520)
+            : (next.ImageTags && next.ImageTags.Thumb ? Api.imageUrl(next, 'Thumb', 520) : '');
         if (image) art.style.backgroundImage = 'url("' + image + '")';
         box.appendChild(art);
 

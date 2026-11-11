@@ -35,7 +35,7 @@
             shown = item;
             U.clear(info);
 
-            shell.backdrop.set(UI.backdropUrl(item, 1280));
+            shell.backdrop.set(UI.backdropUrl(item, 1920));
             info.appendChild(UI.titleBlock(item, 'stage-title'));
 
             var extra = item.Type === 'Series' && item.ChildCount

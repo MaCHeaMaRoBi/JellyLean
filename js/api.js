@@ -6,7 +6,7 @@
     var CLIENT_NAME = 'JellyLean';
     /* Must equal the widget version in config.xml; scripts/build.sh fails the
        build when they differ. */
-    var CLIENT_VERSION = '1.0.9';
+    var CLIENT_VERSION = '1.0.10';
 
     /* What the browse screens need to draw a card and the Home stage: art for
        every role (backdrop and logo feed the ambient stage) and the text that
@@ -689,24 +689,27 @@
             return !!(source.SupportsDirectStream && source.DirectStreamUrl);
         },
 
-        imageUrl: function (item, type, maxWidth) {
+        imageUrl: function (item, type, maxWidth, maxHeight) {
             if (!item || !item.Id) return '';
             var tag = item.ImageTags && item.ImageTags[type];
             if (!tag && type === 'Backdrop' && item.BackdropImageTags && item.BackdropImageTags.length) {
                 tag = item.BackdropImageTags[0];
             }
-            return Api.imageById(item.Id, type, maxWidth, tag);
+            return Api.imageById(item.Id, type, maxWidth, tag, maxHeight);
         },
 
         /* Artwork that belongs to another item: an episode borrows its series'
            backdrop and logo. */
-        imageById: function (itemId, type, maxWidth, tag) {
+        imageById: function (itemId, type, maxWidth, tag, maxHeight) {
             if (!itemId) return '';
             var params = {
                 maxWidth: maxWidth || 400,
                 quality: 84,
                 api_key: state.token
             };
+            /* Both caps keep the server from upscaling into a box the client
+               cannot use (a logo taller than the title row, for instance). */
+            if (maxHeight) params.maxHeight = maxHeight;
             if (tag) params.tag = tag;
             return url('/Items/' + itemId + '/Images/' + type, params);
         },
