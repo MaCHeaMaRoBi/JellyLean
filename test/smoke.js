@@ -271,7 +271,6 @@ async function main() {
            would send Down to whatever still owned focus. */
         await waitFor("document.activeElement && document.activeElement.id === 'username'",
             'username focus');
-
         await press('ArrowDown', 40);
         check('down moves username to password',
             (await evaluate("document.activeElement.id")) === 'password');
@@ -283,12 +282,13 @@ async function main() {
             (await evaluate("document.activeElement.id")) === 'quickBtn');
 
         /* Discover talks to Seerr directly: the dev server serves a mock of it
-           under /seerr, and the address and key come from Settings. */
+           under /seerr, and the address and key come from Settings. Configured
+           before the sign-in to exercise the pre-login prefs adoption. */
         await evaluate("Seerr.configure(location.origin + '/seerr', 'dev-key'); true");
 
         await evaluate("document.querySelector('#username').value='dev';" +
             "document.querySelector('#password').value='dev';" +
-            "document.querySelector('#loginBtn').click(); true");
+            " document.querySelector('#loginBtn').click(); true");
 
         await waitFor("document.querySelectorAll('.row .card').length > 0", 'home rows');
         var rowTitles = await evaluate(
@@ -1092,20 +1092,82 @@ async function main() {
         check('no transcode bitrate setting', qualityRow === false);
         await capture('07-settings');
 
+        /* ---------------------------------------------- two users, one TV */
+
+        await clickButton('Switch user');
+        await waitFor("!!document.querySelector('.account-card')", 'account picker');
+        check('the picker lists the signed-in account and an add card',
+            (await evaluate("document.querySelectorAll('.account-card').length")) === 2 &&
+            /dev/i.test(await evaluate("document.body.innerText")));
+        check('the picker is not the server form',
+            (await evaluate("!document.querySelector('#serverUrl')")) === true);
+
+        await evaluate("Array.prototype.filter.call(document.querySelectorAll('.account-card')," +
+            " function (b) { return b.className.indexOf('add') !== -1; })[0].click(); true");
+        await waitFor("!!document.querySelector('#serverUrl')", 'server form after add account');
+
+        /* Backing out of "Add account" must not leave the live session with
+           the empty token the server probe installed. */
+        await press('Unidentified', 10009);
+        await press('Unidentified', 10009);
+        await waitFor("(document.querySelector('h1.title') || {}).textContent === 'Settings'",
+            'settings after backing out of add account');
+        check('backing out of add account restores the live session',
+            await evaluate("Api.token === Store.auth().token && !!Api.token"));
+
+        await clickButton('Switch user');
+        await waitFor("!!document.querySelector('.account-card')", 'picker again');
+        await evaluate("Array.prototype.filter.call(document.querySelectorAll('.account-card')," +
+            " function (b) { return b.className.indexOf('add') !== -1; })[0].click(); true");
+        await waitFor("!!document.querySelector('#serverUrl')", 'server form after add account');
+        await evaluate("document.querySelector('#serverUrl').value='localhost:" + PORT + "'; true");
+        await evaluate("document.querySelector('#connectBtn').click(); true");
+        await waitFor("!!document.querySelector('#username')", 'login for the second account');
+        await evaluate("document.querySelector('#username').value='alex';" +
+            " document.querySelector('#password').value='dev';" +
+            " document.querySelector('#loginBtn').click(); true");
+        await waitFor("Store.accounts().length === 2 && Store.auth().userName === 'alex'",
+            'second account signed in');
+        check('a second account signs in without losing the first',
+            (await evaluate("Store.accounts().map(function (a) { return a.userName; }).sort().join(',')")) ===
+            'alex,dev');
+
+        await evaluate("App.go('settings'); true");
+        await waitFor("(document.querySelector('h1.title') || {}).textContent === 'Settings'",
+            'settings for the second user');
+        await clickButton('Switch user');
+        await waitFor("!!document.querySelector('.account-card')", 'picker with two accounts');
+        check('the picker shows both accounts plus add',
+            (await evaluate("document.querySelectorAll('.account-card').length")) === 3);
+        await capture('08-accounts');
+        await evaluate("Array.prototype.filter.call(document.querySelectorAll('.account-card')," +
+            " function (b) { return /dev/i.test(b.textContent); })[0].click(); true");
+        await waitFor("Store.auth().userName === 'dev'", 'switched back to dev');
+        check('switching restores the other account',
+            await evaluate("Api.token === Store.auth().token && Store.isLoggedIn()"));
+
         /* ------------------------------------------------------------ 401 */
 
-        /* A dead token anywhere must return to setup instead of leaving every
-           screen stuck on "HTTP 401". Done last because it signs the app out. */
+        /* A dead token anywhere must return to the picker instead of leaving
+           every screen stuck on "HTTP 401". Done last because it signs the
+           active account out. */
         expect401 = true;
         await evaluate("Store.setPref('seerrKey', 'secret'); Store.setPref('seerrMode', 'key'); true");
-        await evaluate("Api.configure({ serverUrl: App && Store.auth().serverUrl," +
+        await evaluate("Api.configure({ serverUrl: Store.auth().serverUrl," +
             " token: 'expired-token', userId: Store.auth().userId," +
             " deviceId: Store.deviceId() }); Api.views().catch(function () {}); true");
-        await waitFor("!!document.querySelector('#serverUrl')", 'setup after a 401');
-        check('a 401 clears the session and returns to setup', true);
+        await waitFor("!!document.querySelector('.account-card')", 'picker after a 401');
+        check('a 401 drops only the failing account and offers the picker',
+            (await evaluate("Store.accounts().length")) === 1 &&
+            (await evaluate("Store.accounts()[0].userName")) === 'alex');
         check('the dead token is not kept', await evaluate("!Store.isLoggedIn()"));
-        check('a 401 also forgets the Seerr connection',
+        check('a 401 also forgets the failing account\'s Seerr connection',
             await evaluate("!Store.pref('seerrKey') && !Store.pref('seerrMode')"));
+
+        /* With nobody left, setup falls back to the server form. */
+        await evaluate("Store.removeAccount(Store.accounts()[0].id); App.go('setup', {}, true); true");
+        await waitFor("!!document.querySelector('#serverUrl')", 'setup after the last account');
+        check('setup returns to the server form when no account remains', true);
 
         await sleep(300);
 

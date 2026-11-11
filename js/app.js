@@ -142,8 +142,13 @@
                     if (!U.moveFocus(document, 'down')) U.rescueFocus(root);
                     return;
                 }
-                /* Nothing to go back to before login. */
+                /* Nothing to go back to before login, unless the picker was
+                   opened from Settings. */
                 if (mounted && mounted.name === 'setup') {
+                    if (mounted.params && mounted.params.picker && stack.length > 1) {
+                        App.back();
+                        return;
+                    }
                     App.exitApp();
                     return;
                 }
@@ -494,6 +499,26 @@
 
     /* ---------------------------------------------------------------- boot */
 
+    /* Every account change starts from a blank session: the old socket, the
+       cached Seerr status and the screen stack all belong to the old viewer. */
+    function resetSession() {
+        SyncPlay.disconnect();
+        if (global.Seerr) Seerr.reset();
+        UI.resetViews();
+        pendingItemId = null;
+        stack = [];
+    }
+
+    function configureAuth(auth) {
+        Api.configure({
+            serverUrl: auth.serverUrl,
+            token: auth.token,
+            userId: auth.userId,
+            deviceId: Store.deviceId(),
+            deviceName: Store.deviceName()
+        });
+    }
+
     function startApp() {
         stack = [{ name: 'home', params: {} }];
         wireSyncPlay();
@@ -502,7 +527,18 @@
     }
 
     App.afterLogin = function () {
+        resetSession();
         startApp();
+    };
+
+    /* Switch to an account already stored on this TV. */
+    App.switchAccount = function (id) {
+        var account = Store.switchAccount(id);
+        if (!account) return false;
+        resetSession();
+        configureAuth(account);
+        startApp();
+        return true;
     };
 
     App.logout = function () {
@@ -513,7 +549,9 @@
         if (global.Seerr) Seerr.disconnect();
         Api.logout();
         Store.clearAuth();
+        pendingItemId = null;
         stack = [];
+        /* Setup shows the picker when another account is still stored. */
         go('setup', {}, true);
     };
 
@@ -529,13 +567,16 @@
         bindLifecycle();
         registerTvKeys();
 
-        /* A dead token must not leave every screen stuck on HTTP 401. */
+        /* A dead token must not leave every screen stuck on HTTP 401, and it
+           must drop only the account that failed: another viewer on this TV
+           keeps their login. */
         Api.onUnauthorized(function () {
-            SyncPlay.disconnect();
+            var others = Store.accounts().length > 1;
+            resetSession();
             Store.clearAuth();
-            stack = [];
             go('setup', {}, true);
-            U.toast('Your session expired. Sign in again.');
+            U.toast(others ? 'Your session expired. Choose another profile.'
+                : 'Your session expired. Sign in again.');
         });
 
         if (!Store.isLoggedIn()) {
@@ -543,14 +584,7 @@
             return;
         }
 
-        var auth = Store.auth();
-        Api.configure({
-            serverUrl: auth.serverUrl,
-            token: auth.token,
-            userId: auth.userId,
-            deviceId: Store.deviceId(),
-            deviceName: Store.deviceName()
-        });
+        configureAuth(Store.auth());
 
         /* Validate the stored token once; a server that is merely offline still
            lets the user into the UI, where the retry buttons live. */

@@ -46,10 +46,7 @@ jobs:
       - run: node test/syncplay.js
       - run: node scripts/check-design.js
       - run: node test/osd.js
-
-      # Depends on Store.accounts, which is not committed yet.
-      - name: Store test
-        run: if [ -f test/store.js ]; then node test/store.js; fi
+      - run: node test/store.js
 
   smoke:
     runs-on: ubuntu-24.04
