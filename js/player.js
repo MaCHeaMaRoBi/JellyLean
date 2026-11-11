@@ -323,26 +323,27 @@
         if (state.paused === false) return;
         if (state.mode === 'avplay' && av) {
             try { av.play(); } catch (e) { console.warn(e); }
+            /* AVPlay's own PLAYING/PAUSED events are swallowed because the flag
+               is already set when they arrive, so announce the change here. */
+            Player.emit('playing');
         } else if (videoEl) {
+            /* The <video> element's own 'playing' listener announces it. */
             var p = videoEl.play();
             if (p && p.catch) p.catch(function () {});
         }
         state.paused = false;
-        /* AVPlay's own PLAYING/PAUSED events are swallowed because the flag is
-           already set when they arrive, so announce the change here: the OSD
-           label and the server's paused state both hang off this event. */
-        Player.emit('playing');
     };
 
     Player.pause = function () {
         if (state.paused) return;
         if (state.mode === 'avplay' && av) {
             try { av.pause(); } catch (e) { console.warn(e); }
+            Player.emit('paused');
         } else if (videoEl) {
+            /* The element's own 'pause' listener announces it, once. */
             videoEl.pause();
         }
         state.paused = true;
-        Player.emit('paused');
     };
 
     Player.seekTo = function (ms) {
