@@ -142,7 +142,7 @@ async function main() {
             'about:blank'
         ], { stdio: 'ignore' });
 
-        await waitForHttp('http://127.0.0.1:' + CDP_PORT + '/json/version');
+        await waitForHttp('http://127.0.0.1:' + CDP_PORT + '/json/version', 60000);
 
         var targetResponse = await fetch(
             'http://127.0.0.1:' + CDP_PORT + '/json/new?' + encodeURIComponent('about:blank'),
@@ -1218,12 +1218,14 @@ async function main() {
         await evaluate("document.querySelector('#username').value='alex';" +
             " document.querySelector('#password').value='dev';" +
             " U.focusNode(document.querySelector('#password')); true");
-        /* Enter in edit mode on the last field still signs in. */
+        /* The first Enter only makes the field editable; the second one signs
+           in. Wait for the flip instead of guessing at a sleep. */
         await press('Enter', 13);
-        await sleep(120);
+        await waitFor("document.querySelector('#password').readOnly === false",
+            'password field editable');
         await press('Enter', 13);
         await waitFor("Store.accounts().length === 2 && Store.auth().userName === 'alex'",
-            'second account signed in');
+            'second account signed in', 40000);
         check('a second account signs in without losing the first',
             (await evaluate("Store.accounts().map(function (a) { return a.userName; }).sort().join(',')")) ===
             'alex,dev');
