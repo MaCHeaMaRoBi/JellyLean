@@ -26,7 +26,30 @@
         }
         box.textContent = 'JellyLean could not start\n\n' + lines.slice(0, 6).join('\n');
     }
-    window.__bootLog = function (text) { lines.push(text); show(); };
+    window.__bootLog = function (text) {
+        /* Signing in can take a while; once the UI is up nothing here is true. */
+        var app = document.getElementById('app');
+        if (app && app.firstChild) return;
+        lines.push(text);
+        show();
+    };
+    /* A complaint raised while the app was still signing in must come down when
+       the first screen finally paints, including a paint that lands after the
+       check at the bottom of this script. Watching #app covers every screen the
+       router draws, so no screen has to remember to call this. */
+    function clear() {
+        var box = document.getElementById('bootError');
+        if (box && box.parentNode) box.parentNode.removeChild(box);
+        lines.length = 0;
+    }
+    document.addEventListener('DOMContentLoaded', function () {
+        var app = document.getElementById('app');
+        if (!app || !window.MutationObserver) return;
+        if (app.firstChild) { clear(); return; }
+        new MutationObserver(function () {
+            if (app.firstChild) clear();
+        }).observe(app, { childList: true });
+    });
     /* Only a failure before the first screen paints is a startup failure. Once
        the UI is up, one missing poster must not cover it with this panel — and
        an image URL carries the access token, so it is never drawn. */
@@ -48,11 +71,15 @@
             document.head.appendChild(link);
         }, 1200);
     });
+    /* A stored session is validated against the server before the first screen
+       exists, so a slow network can leave #app empty for several seconds. Give
+       that 15 s; if the UI arrives after the panel is up, the observer above
+       takes it back down. */
     window.addEventListener('load', function () {
         setTimeout(function () {
             var app = document.getElementById('app');
             if (app && !app.firstChild) window.__bootLog('Nothing rendered after load.');
-        }, 4000);
+        }, 15000);
     });
 })();
 </script>
