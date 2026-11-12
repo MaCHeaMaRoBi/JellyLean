@@ -187,6 +187,8 @@ async function main() {
             if (/image\.tmdb\.org/.test(entry.url || '') && /ERR_(TUNNEL|NAME|INTERNET|CONNECTION)/.test(entry.text || '')) return;
             /* The 401 check deliberately asks the server for one. */
             if (expect401 && /\b401\b/.test(entry.text || '')) return;
+            /* The boot-panel check asks for a file that does not exist. */
+            if (/does-not-exist\.js/.test((entry.url || '') + ' ' + (entry.text || ''))) return;
             errors.push('log: ' + entry.text + (entry.url ? ' (' + entry.url + ')' : ''));
         });
 
@@ -1266,6 +1268,54 @@ async function main() {
         await evaluate("Store.removeAccount(Store.accounts()[0].id); App.go('setup', {}, true); true");
         await waitFor("!!document.querySelector('#serverUrl')", 'setup after the last account');
         check('setup returns to the server form when no account remains', true);
+
+        /* ---- boot panel: a slow start is not a failed start ------------- */
+
+        /* A real failure before the first screen paints must still be reported,
+           and must come down once the UI arrives. */
+        await evaluate("document.getElementById('app').innerHTML='';" +
+            " window.__bootLog('smoke: simulated failure'); true");
+        check('a failure before the first paint still shows the panel',
+            (await evaluate("!!document.getElementById('bootError')")) === true);
+        await evaluate("document.getElementById('app').appendChild(document.createElement('div')); true");
+        await sleep(80);
+        check('the panel is withdrawn once the first screen paints',
+            (await evaluate("!document.getElementById('bootError')")) === true);
+
+        /* A missing file goes through the real error handler, not __bootLog. */
+        await evaluate("document.getElementById('app').innerHTML='';" +
+            " var s = document.createElement('script'); s.src = '/js/does-not-exist.js';" +
+            " document.head.appendChild(s); true");
+        await sleep(300);
+        check('a missing file before the first paint shows the panel',
+            (await evaluate("(document.getElementById('bootError') || {}).textContent || ''"))
+                .indexOf('failed to load') !== -1);
+
+        /* A stored session makes the app validate /Users/Me before the first
+           screen exists. Hold that response for 6 s: the old 4 s check painted
+           "Nothing rendered after load." over the working app. */
+        await evaluate("Store.saveAuth({serverUrl: 'http://localhost:" + PORT + "'," +
+            " serverId: 'devserver', serverName: 'Fake Jellyfin'," +
+            " userId: 'user-dev', userName: 'dev', token: 'devtoken'}); true");
+        await cdp.send('Page.addScriptToEvaluateOnNewDocument', {
+            source: "(function () {" +
+                " var real = window.fetch;" +
+                " window.fetch = function (input, init) {" +
+                "  var url = typeof input === 'string' ? input : String(input && input.url || '');" +
+                "  if (url.indexOf('/Users/Me') === -1) return real.call(window, input, init);" +
+                "  return new Promise(function (resolve, reject) {" +
+                "   setTimeout(function () { real.call(window, input, init).then(resolve, reject); }, 6000);" +
+                "  });" +
+                " };" +
+                "})();"
+        });
+        await cdp.send('Page.navigate', { url: APP_URL });
+        await sleep(5000);
+        check('a slow sign-in does not paint the boot panel',
+            (await evaluate("!document.getElementById('bootError')")) === true);
+        await waitFor("!!document.querySelector('.stage-title')", 'home after a slow sign-in', 30000);
+        check('the panel stays away once the slow UI paints',
+            (await evaluate("!document.getElementById('bootError')")) === true);
 
         await sleep(300);
 
