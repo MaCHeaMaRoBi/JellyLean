@@ -68,16 +68,29 @@
 
         function editing() { return !input.readOnly; }
 
+        /* True while start() is cycling focus, so the blur it causes is not
+           mistaken for the viewer leaving the field. */
+        var cycling = false;
+
+        /* The field is already the focused element when OK is pressed (it was
+           focused while readonly), so a bare focus() is a no-op: no focus event
+           fires and Tizen never gets the chance to raise the IME. Blur and
+           refocus so a real focus event arrives with the field editable. */
+        function refocus() {
+            cycling = true;
+            try { input.blur(); } catch (e) { /* detached node */ }
+            try { input.focus(); } catch (e) { /* detached node */ }
+            cycling = false;
+            try {
+                var n = input.value.length;
+                input.setSelectionRange(n, n);
+            } catch (e) { /* type without a selection */ }
+        }
+
         function start() {
             if (editing()) return;
             input.readOnly = false;
-            try { input.focus(); } catch (e) { /* detached node */ }
-            /* Tizen decides whether to raise the IME from the focus event,
-               which can run before the readonly flip lands: focus again once
-               the property has settled. */
-            setTimeout(function () {
-                if (editing() && document.activeElement === input) input.focus();
-            }, 60);
+            refocus();
             if (o.onStart) o.onStart(input);
         }
 
@@ -97,7 +110,6 @@
                    focused next. */
                 if (editing()) { event.stopPropagation(); stop(); return; }
                 /* Only focused: OK opens the keyboard, and must not submit. */
-                event.preventDefault();
                 event.stopImmediatePropagation();
                 start();
                 return;
@@ -113,6 +125,7 @@
         /* Focus left the field (Down, a click elsewhere, a rebuilt screen): it
            is navigable again, so the next focus does not raise the keyboard. */
         input.addEventListener('blur', function () {
+            if (cycling) return;
             setTimeout(function () {
                 if (document.activeElement !== input) stop();
             }, 0);
