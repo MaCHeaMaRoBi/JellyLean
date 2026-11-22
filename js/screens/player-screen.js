@@ -335,7 +335,8 @@
 
         if (transcoding) {
             var capMbps = Store.pref('maxBitrate', 0);
-            infoRow(playback, 'Bitrate cap', (capMbps > 0 ? capMbps + ' Mbps' : 'None') + ' (1920\u00d71080 max)');
+            infoRow(playback, 'Bitrate cap', (capMbps > 0 ? capMbps + ' Mbps' : 'None') +
+                (Store.pref('maxResolution', '1080') === '4k' ? ' (3840\u00d72160 max)' : ' (1920\u00d71080 max)'));
         }
 
         /* ------------------------------------------------------ transcoding */
@@ -1129,7 +1130,7 @@
        caller restarts through the server. */
     function switchAudioInPlace(stream) {
         if (!session || session.playMethod !== 'DirectPlay' || !Player.hasAvplay) return false;
-        if (!AudioPrefs.directPlayable(stream, surroundOn())) return false;
+        if (!AudioPrefs.directPlayable(stream, surroundOn(), Store.pref('allowFlac', false) === true)) return false;
 
         var info = Player.getAudioTracks();
         if (!info || !info.tracks.length) return false;

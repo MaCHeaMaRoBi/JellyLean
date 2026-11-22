@@ -124,6 +124,20 @@
                 'transcode'
             ));
             list.appendChild(choiceRow(
+                'Maximum resolution',
+                '1080p suits a Full HD panel: anything larger is transcoded down. Pick 4K on a 4K TV to direct play UHD files (HEVC also needs Allow HEVC direct play) and to let transcodes stay at 3840x2160.',
+                [
+                    { value: '1080', label: '1080p' },
+                    { value: '4k', label: '4K' }
+                ],
+                Store.pref('maxResolution', '1080'),
+                function (value) {
+                    Store.setPref('maxResolution', value);
+                    U.toast('Takes effect on the next playback');
+                },
+                'tv'
+            ));
+            list.appendChild(choiceRow(
                 'Audio output',
                 'Surround keeps up to 5.1 channels and needs a soundbar or receiver on HDMI ARC or optical, with the TV set to pass sound through. Stereo has the server mix everything down to two channels.',
                 [
@@ -157,6 +171,16 @@
                     U.toast('Takes effect on the next playback');
                 },
                 'transcode'
+            ));
+            list.appendChild(toggleRow(
+                'Allow FLAC direct play',
+                'Let the TV decode FLAC audio itself instead of the server converting it. Newer Tizen TVs can; if a movie plays without sound, turn this off.',
+                Store.pref('allowFlac', false) === true,
+                function (value) {
+                    Store.setPref('allowFlac', value);
+                    U.toast('Takes effect on the next playback');
+                },
+                'audio'
             ));
             list.appendChild(toggleRow(
                 'Autoplay next episode',

@@ -202,6 +202,16 @@
     var UNCAPPED_BITRATE = 1000000000;
     var MAX_WIDTH = 1920;
     var MAX_HEIGHT = 1080;
+    /* Opt-in ceiling for TVs with a 4K panel (Settings > Maximum resolution). */
+    var UHD_WIDTH = 3840;
+    var UHD_HEIGHT = 2160;
+
+    /* The width/height the profile and the transcoding URL are held to. */
+    function resolutionLimit(uhd) {
+        return uhd === true
+            ? { width: UHD_WIDTH, height: UHD_HEIGHT }
+            : { width: MAX_WIDTH, height: MAX_HEIGHT };
+    }
 
     /* The viewer's cap in Mbps (0 = none) as the bits per second Jellyfin wants. */
     function bitrateCap(maxMbps) {
@@ -214,12 +224,18 @@
          surround  true (default) keeps up to 5.1 channels, false downmixes to
                    stereo AAC whenever the server has to touch the audio;
          hevc      true also claims HEVC for direct play (off by default, see
-                   the note on VIDEO_DIRECT below). */
+                   the note on VIDEO_DIRECT below);
+         uhd       true lifts the 1920x1080 ceiling to 3840x2160 and the codec
+                   levels to what a 4K panel decodes (H.264 5.1, HEVC 5.1);
+         flac      true also claims FLAC audio for direct play. */
     function deviceProfile(forceTranscode, maxMbps, features) {
         var cap = bitrateCap(maxMbps);
         var opts = features || {};
         var surround = opts.surround !== false;
         var hevc = opts.hevc === true;
+        var uhd = opts.uhd === true;
+        var flac = opts.flac === true;
+        var limit = resolutionLimit(uhd);
 
         /* Only codecs a 2017 Samsung actually decodes. Claiming more (DTS,
            TrueHD, Opus, Vorbis, FLAC) makes the server hand over a stream
@@ -230,12 +246,12 @@
            1080p panel gains nothing from HEVC. */
         var VIDEO_DIRECT = hevc ? 'h264,mpeg4,hevc,h265' : 'h264,mpeg4';
         var TS_VIDEO_DIRECT = hevc ? 'h264,mpeg2video,hevc,h265' : 'h264,mpeg2video';
-        var AUDIO_DIRECT = 'aac,mp3,ac3,eac3';
+        var AUDIO_DIRECT = flac ? 'aac,mp3,ac3,eac3,flac' : 'aac,mp3,ac3,eac3';
 
         var videoConditions = [
-            { Condition: 'LessThanEqual', Property: 'VideoLevel', Value: '41', IsRequired: false },
-            { Condition: 'LessThanEqual', Property: 'Width', Value: String(MAX_WIDTH), IsRequired: true },
-            { Condition: 'LessThanEqual', Property: 'Height', Value: String(MAX_HEIGHT), IsRequired: true },
+            { Condition: 'LessThanEqual', Property: 'VideoLevel', Value: uhd ? '51' : '41', IsRequired: false },
+            { Condition: 'LessThanEqual', Property: 'Width', Value: String(limit.width), IsRequired: true },
+            { Condition: 'LessThanEqual', Property: 'Height', Value: String(limit.height), IsRequired: true },
             { Condition: 'LessThanEqual', Property: 'VideoBitDepth', Value: '8', IsRequired: false }
         ];
 
@@ -243,13 +259,13 @@
             { Type: 'Video', Codec: 'h264', Conditions: videoConditions }
         ];
         if (hevc) {
-            /* HEVC levels are 30 x the spec number, so 4.1 is 123. */
+            /* HEVC levels are 30 x the spec number: 4.1 is 123, 5.1 is 153. */
             codecProfiles.push({
                 Type: 'Video', Codec: 'hevc,h265',
                 Conditions: [
-                    { Condition: 'LessThanEqual', Property: 'VideoLevel', Value: '123', IsRequired: false },
-                    { Condition: 'LessThanEqual', Property: 'Width', Value: String(MAX_WIDTH), IsRequired: true },
-                    { Condition: 'LessThanEqual', Property: 'Height', Value: String(MAX_HEIGHT), IsRequired: true },
+                    { Condition: 'LessThanEqual', Property: 'VideoLevel', Value: uhd ? '153' : '123', IsRequired: false },
+                    { Condition: 'LessThanEqual', Property: 'Width', Value: String(limit.width), IsRequired: true },
+                    { Condition: 'LessThanEqual', Property: 'Height', Value: String(limit.height), IsRequired: true },
                     { Condition: 'LessThanEqual', Property: 'VideoBitDepth', Value: '10', IsRequired: false }
                 ]
             });
@@ -583,7 +599,9 @@
                 EnableTranscoding: true,
                 DeviceProfile: deviceProfile(forceTranscode, opts.maxBitrate, {
                     surround: opts.surround,
-                    hevc: opts.hevc
+                    hevc: opts.hevc,
+                    uhd: opts.uhd,
+                    flac: opts.flac
                 })
             };
 
@@ -603,7 +621,7 @@
             return request('POST', '/Items/' + itemId + '/PlaybackInfo', body, params);
         },
 
-        /* A 2017 TV is 1080p. Unless the viewer sets a cap in Settings
+        /* A 2017 TV is 1080p (a 4K one can opt in to 3840x2160). Unless the viewer sets a cap in Settings
            (opts.maxBitrate, Mbps) the transcode bitrate is uncapped, so the target
            resolution can no longer be inferred from it: the device profile
            requires Width/Height <= 1920x1080 and the transcoding URL is pinned
@@ -625,6 +643,8 @@
                     maxBitrate: opts.maxBitrate,
                     surround: opts.surround,
                     hevc: opts.hevc,
+                    uhd: opts.uhd,
+                    flac: opts.flac,
                     mediaSourceId: opts.mediaSourceId,
                     subtitleIndex: subtitleIndex,
                     audioIndex: audioIndex
@@ -657,7 +677,7 @@
                        its SubtitleStreamIndex/SubtitleMethod=Encode pair. */
                     streamUrl = Api.absoluteUrl(Api.limitResolution(subtitleIndex >= 0
                         ? source.TranscodingUrl
-                        : Api.stripSubtitleParams(source.TranscodingUrl)));
+                        : Api.stripSubtitleParams(source.TranscodingUrl), opts.uhd === true));
                 } else {
                     method = 'DirectPlay';
                     streamUrl = Api.streamUrl(itemId, source.Id, playSessionId);
@@ -853,11 +873,12 @@
             }).then(null, function () { return finish(false); });
         },
 
-        /* Pin a transcoding URL to 1920x1080 at most, whatever the server chose.
-           Replaces any maxWidth/maxHeight already present and drops the
-           width/height pair that would override them. */
-        limitResolution: function (pathOrUrl) {
+        /* Pin a transcoding URL to 1920x1080 at most (3840x2160 when `uhd`),
+           whatever the server chose. Replaces any maxWidth/maxHeight already
+           present and drops the width/height pair that would override them. */
+        limitResolution: function (pathOrUrl, uhd) {
             if (!pathOrUrl) return '';
+            var limit = resolutionLimit(uhd);
 
             var split = pathOrUrl.indexOf('?');
             var base = split === -1 ? pathOrUrl : pathOrUrl.slice(0, split);
@@ -870,7 +891,7 @@
                 kept.push(parts[i]);
             }
 
-            kept.push('maxWidth=' + MAX_WIDTH, 'maxHeight=' + MAX_HEIGHT);
+            kept.push('maxWidth=' + limit.width, 'maxHeight=' + limit.height);
             return base + '?' + kept.join('&');
         },
 
