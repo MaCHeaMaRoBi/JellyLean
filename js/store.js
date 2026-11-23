@@ -11,7 +11,7 @@
     /* These describe the TV, not the viewer: the bitrate it can decode, the
        speakers it has, the codecs it claims. Switching user must not change
        what the device tells the server, so they stay device-wide. */
-    var DEVICE_PREFS = { maxBitrate: 1, audioOutput: 1, allowHevc: 1 };
+    var DEVICE_PREFS = { maxBitrate: 1, audioOutput: 1, allowHevc: 1, maxResolution: 1, allowFlac: 1 };
 
     var data = load();
     migrate();

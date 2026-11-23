@@ -60,6 +60,8 @@ run on any Tizen TV from 2015 onwards.
   info panel and inline SVG icons. No pointer required.
 - **Opt-in bitrate cap** — uncapped and pinned to 1080p by default; cap it to
   2–40 Mbps in Settings if the TV or network struggles with high-bitrate remuxes.
+- **Opt-in 4K** — **Maximum resolution → 4K** lets a 4K TV direct play UHD files
+  and keeps transcodes at 3840x2160. 1080p stays the default.
 - **Small and static** — no runtime dependencies, no framework, no build step.
 
 ## Screenshots
@@ -228,7 +230,8 @@ By default the client asks for **Surround (5.1)**:
 | Source | Direct play | When the server transcodes |
 | --- | --- | --- |
 | AAC, MP3, AC3, E-AC3 up to 6 channels | untouched | kept as AC3 / E-AC3 / AAC, up to 6 channels |
-| DTS, DTS-HD, TrueHD, FLAC, Opus | not claimed, so the server converts it | 5.1 AC3 |
+| FLAC | not claimed by default; **Settings → Allow FLAC direct play** passes it through | 5.1 AC3 |
+| DTS, DTS-HD, TrueHD, Opus | not claimed, so the server converts it | 5.1 AC3 |
 | 7.1 E-AC3 or AAC | converted (the TV passes 5.1 at most) | 5.1 AC3 |
 
 **Settings → Audio output → Stereo** has the server mix everything down to two
@@ -286,9 +289,11 @@ test/           smoke, live, syncplay, osd, profile
 claims H.264 up to 1080p and AAC/MP3/AC3/E-AC3. HEVC is not claimed by default:
 a UHD remux direct-played to a black picture on the test panel, so the server
 transcodes it instead. **Settings → Allow HEVC direct play** claims it (still
-capped at 1080p) for TVs that handle it. Transcoded streams are uncapped but pinned to 1920x1080
-through `maxWidth`/`maxHeight`, because Jellyfin otherwise derives the resolution
-from the bitrate. A direct stream that errors, or reports no frames for 12 seconds,
+capped at 1080p) for TVs that handle it. **Settings → Maximum resolution → 4K**
+raises that ceiling to 3840x2160 and the codec levels to 5.1 (H.264 and HEVC) for
+4K panels. Transcoded streams are uncapped but pinned to 1920x1080 (3840x2160 with
+the 4K option) through `maxWidth`/`maxHeight`, because Jellyfin otherwise derives
+the resolution from the bitrate. A direct stream that errors, or reports no frames for 12 seconds,
 is retried once through HLS, and so is a direct play where the file has audio but
 AVPlay lists no audio track (the TV dropped a track it cannot decode, so the
 picture would play in silence).
@@ -356,7 +361,8 @@ Digital Audio Output to *Pass-Through* and check the ARC/optical connection. If 
 says AAC or 2 channels, check **Settings → Audio output** is on Surround.
 
 **Silent video after turning on HEVC direct play** — turn **Allow HEVC direct
-play** off again; that TV cannot decode the file.
+play** off again; that TV cannot decode the file. On a 4K TV, also try
+**Maximum resolution → 1080p**.
 
 **Skip Intro never appears** — needs Jellyfin 10.10+ Media Segments, or the Intro
 Skipper plugin on 10.8/10.9, and analysed episodes.

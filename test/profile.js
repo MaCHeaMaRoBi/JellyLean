@@ -130,6 +130,52 @@ test('allowing HEVC adds it to direct play, still capped to 1080p', function () 
     assert.strictEqual(props.Height.IsRequired, true);
 });
 
+test('the 4K option lifts HEVC and H.264 to 3840x2160, level 5.1', function () {
+    var p = Api.deviceProfile(false, 0, { hevc: true, uhd: true });
+    function props(codec) {
+        var rule = p.CodecProfiles.filter(function (c) { return c.Codec === codec; })[0];
+        var out = {};
+        rule.Conditions.forEach(function (c) { out[c.Property] = c.Value; });
+        return out;
+    }
+    var hevc = props('hevc,h265');
+    assert.strictEqual(hevc.Width, '3840');
+    assert.strictEqual(hevc.Height, '2160');
+    assert.strictEqual(hevc.VideoLevel, '153');
+    assert.strictEqual(hevc.VideoBitDepth, '10');
+    var h264 = props('h264');
+    assert.strictEqual(h264.Width, '3840');
+    assert.strictEqual(h264.Height, '2160');
+    assert.strictEqual(h264.VideoLevel, '51');
+    assert.strictEqual(h264.VideoBitDepth, '8');
+});
+
+test('1080p stays the default: uhd off or absent changes nothing', function () {
+    [undefined, false, 'yes'].forEach(function (uhd) {
+        var p = Api.deviceProfile(false, 0, { hevc: true, uhd: uhd });
+        p.CodecProfiles.filter(function (c) { return c.Type === 'Video'; }).forEach(function (rule) {
+            rule.Conditions.forEach(function (c) {
+                if (c.Property === 'Width') assert.strictEqual(c.Value, '1920');
+                if (c.Property === 'Height') assert.strictEqual(c.Value, '1080');
+            });
+        });
+        var level = p.CodecProfiles.filter(function (c) { return c.Codec === 'hevc,h265'; })[0]
+            .Conditions.filter(function (c) { return c.Property === 'VideoLevel'; })[0];
+        assert.strictEqual(level.Value, '123');
+    });
+});
+
+test('FLAC is claimed only when asked for', function () {
+    var off = Api.deviceProfile(false, 0);
+    var on = Api.deviceProfile(false, 0, { flac: true });
+    ['mp4', 'mkv', 'ts'].forEach(function (c) {
+        assert.strictEqual(direct(off, c).AudioCodec.indexOf('flac'), -1);
+        assert.deepStrictEqual(codecs(direct(on, c).AudioCodec).sort(), ['aac', 'ac3', 'eac3', 'flac', 'mp3']);
+    });
+    var cap = on.CodecProfiles.filter(function (c) { return c.Type === 'VideoAudio'; })[0];
+    assert.ok(cap.Codec.indexOf('flac') !== -1, 'the channel cap covers FLAC too');
+});
+
 test('transcoding output stays H.264 whatever direct play allows', function () {
     assert.strictEqual(hls(Api.deviceProfile(false, 0, { hevc: true })).VideoCodec, 'h264');
 });
@@ -158,6 +204,13 @@ test('image subtitles are burned in, text ones stay external', function () {
     Api.deviceProfile(false, 0).SubtitleProfiles.forEach(function (s) { methods[s.Format] = s.Method; });
     assert.strictEqual(methods.srt, 'External');
     assert.strictEqual(methods.pgssub, 'Encode');
+});
+
+test('transcoding URLs are pinned to 1080p, or 4K when allowed', function () {
+    var url = '/videos/1/master.m3u8?a=1&maxWidth=640&Width=100&height=50&b=2';
+    assert.strictEqual(Api.limitResolution(url), '/videos/1/master.m3u8?a=1&b=2&maxWidth=1920&maxHeight=1080');
+    assert.strictEqual(Api.limitResolution(url, true), '/videos/1/master.m3u8?a=1&b=2&maxWidth=3840&maxHeight=2160');
+    assert.strictEqual(Api.limitResolution('/x', false), '/x?maxWidth=1920&maxHeight=1080');
 });
 
 console.log('transcode info');
@@ -205,6 +258,9 @@ test('only codecs the TV decodes can be switched to in place', function () {
     assert.strictEqual(AudioPrefs.directPlayable(stream(1, 'eng', 'eac3', 8), true), false);
     assert.strictEqual(AudioPrefs.directPlayable(stream(1, 'eng', 'eac3', 8), false), true);
     assert.strictEqual(AudioPrefs.directPlayable(null, true), false);
+    assert.strictEqual(AudioPrefs.directPlayable(stream(1, 'eng', 'flac', 2), true), false);
+    assert.strictEqual(AudioPrefs.directPlayable(stream(1, 'eng', 'flac', 2), true, true), true);
+    assert.strictEqual(AudioPrefs.directPlayable(stream(1, 'eng', 'dts', 6), true, true), false);
 });
 
 test('picks the right track in a language: no commentary, default first, most channels', function () {

@@ -299,7 +299,7 @@
         if (!want) return result;
 
         if (result.method === 'DirectPlay') {
-            if (Player.hasAvplay && AudioPrefs.directPlayable(want, base.surround)) {
+            if (Player.hasAvplay && AudioPrefs.directPlayable(want, base.surround, base.flac)) {
                 result.audioIndex = want.Index;
                 result.audioInPlace = true;
                 return result;
@@ -318,6 +318,8 @@
             maxBitrate: base.maxBitrate,
             surround: base.surround,
             hevc: base.hevc,
+            uhd: base.uhd,
+            flac: base.flac,
             subtitleIndex: result.subtitleIndex,
             audioIndex: want.Index,
             mediaSourceId: result.source.Id
@@ -366,6 +368,8 @@
         /* What the TV is told it can decode: Settings > Playback. */
         var surround = Store.pref('audioOutput', 'surround') !== 'stereo';
         var hevc = Store.pref('allowHevc', false) === true;
+        var uhd = Store.pref('maxResolution', '1080') === '4k';
+        var flac = Store.pref('allowFlac', false) === true;
 
         return Api.negotiate(item.Id, {
             startTicks: startTicks,
@@ -373,6 +377,8 @@
             maxBitrate: maxBitrate,
             surround: surround,
             hevc: hevc,
+            uhd: uhd,
+            flac: flac,
             subtitleIndex: opts.subtitleIndex,
             audioIndex: opts.audioIndex,
             mediaSourceId: opts.mediaSourceId
@@ -400,6 +406,8 @@
                 maxBitrate: maxBitrate,
                 surround: surround,
                 hevc: hevc,
+                uhd: uhd,
+                flac: flac,
                 subtitleIndex: image.Index,
                 audioIndex: opts.audioIndex,
                 mediaSourceId: result.source.Id
@@ -417,7 +425,9 @@
                 startTicks: startTicks,
                 maxBitrate: maxBitrate,
                 surround: surround,
-                hevc: hevc
+                hevc: hevc,
+                uhd: uhd,
+                flac: flac
             });
         }).then(function (result) {
             if (!result || !result.source) {

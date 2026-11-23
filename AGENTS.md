@@ -47,7 +47,7 @@ exists (gitignored).
 - Bitrate policy:
   - The default is **uncapped** with the transcode resolution pinned to 1920x1080 (`Api.limitResolution`). Do not reintroduce a default cap.
   - `maxBitrate` (Settings → Maximum bitrate, `0` = no limit) is an opt-in cap and must reach both `PlaybackInfo` and the device profile.
-  - The device profile deliberately does not claim HEVC/DTS; a 4K HEVC remux is expected to transcode.
+  - The device profile deliberately does not claim HEVC/DTS/FLAC by default, and caps at 1080p / level 4.1; a 4K HEVC remux is expected to transcode. Viewers on 4K TVs opt in through Settings → Maximum resolution (`maxResolution: '4k'` → `uhd` in `deviceProfile` / `Api.limitResolution`, 3840x2160, level 5.1), Allow HEVC direct play and Allow FLAC direct play. Keep all three defaults off.
 
 ## Tizen text fields & suspend (confirmed on the TV)
 

@@ -84,10 +84,12 @@
 
     /* True when this TV can decode the track itself, so switching to it needs
        no server round trip. `surround` is the Settings choice: a stereo-only
-       setup still decodes 5.1 itself, the cap only guards the 7.1 case. */
-    function directPlayable(stream, surround) {
+       setup still decodes 5.1 itself, the cap only guards the 7.1 case.
+       `flac` is the Settings opt-in that adds FLAC to what the TV decodes. */
+    function directPlayable(stream, surround, flac) {
         if (!stream) return false;
-        if (!DIRECT_CODECS[String(stream.Codec || '').toLowerCase()]) return false;
+        var codec = String(stream.Codec || '').toLowerCase();
+        if (!DIRECT_CODECS[codec] && !(flac === true && codec === 'flac')) return false;
         if (surround !== false && stream.Channels && Number(stream.Channels) > MAX_SURROUND_CHANNELS) {
             return false;
         }
