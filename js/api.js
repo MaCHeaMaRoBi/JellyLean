@@ -395,8 +395,11 @@
         headers: buildHeaders,
 
         publicInfo: function (serverUrl) {
-            var target = normalizeServerUrl(serverUrl);
-            return fetch(target + '/System/Info/Public', {
+            var target = normalizeServerUrl(serverUrl) + '/System/Info/Public';
+            /* The only request that cannot use `request()` (there is no base
+               URL yet) was also the only one without the XHR fallback. */
+            if (!global.fetch) return xhrRequest('GET', target);
+            return fetch(target, {
                 headers: {
                     'Accept': 'application/json',
                     'X-Emby-Authorization': authHeader()
