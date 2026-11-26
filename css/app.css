@@ -572,6 +572,7 @@ h1, h2, h3, p { margin: 0; }
 .list-row:focus .list-desc { color: #3b4859; }
 .list-row:focus .list-icon { color: #0a0d12; }
 .list-row:focus .pill { background: #0a0d12; }
+.pill:empty { display: none; }
 .list-row:focus .badge-live { border-color: #0a0d12; color: #0a0d12; }
 
 .badge-live {
@@ -811,19 +812,30 @@ h1, h2, h3, p { margin: 0; }
 .stage-info {
     position: absolute;
     left: 96px;
-    top: 140px;
+    top: 120px;
     width: 1100px;
-    height: 384px;
+    height: 428px;
     display: flex;
     flex-direction: column;
     justify-content: flex-end;
     z-index: 3;
 }
 
-.stage-info .meta { margin-top: 20px; }
-.stage-info .overview { margin-top: 16px; -webkit-line-clamp: 2; }
-.stage-info .btn-row { margin-top: 28px; }
-.stage-info .progress-line { margin-top: 20px; }
+/* Nothing in the stage may be squeezed by its neighbours: a shrunken title
+   block clips the logo. Only a text title (which can lose a line) gives way. */
+.stage-info > * { flex-shrink: 0; }
+.stage-info > .stage-title:not(.has-logo) { flex-shrink: 1; min-height: 0; font-size: 80px; }
+.stage-info > .stage-title.long:not(.has-logo) { font-size: 64px; }
+
+.stage-info .meta { margin-top: 16px; }
+.stage-info .overview { margin-top: 12px; -webkit-line-clamp: 2; }
+.stage-info .btn-row { margin-top: 22px; }
+.stage-info .progress-line { margin-top: 16px; }
+
+/* Resumable hero: logo, meta, overview, progress and buttons all share the
+   stage, so the logo and a text title give up some height. */
+.stage-info.has-progress .stage-title .logo { max-height: 120px; }
+.stage-info.has-progress > .stage-title:not(.has-logo) { -webkit-line-clamp: 1; }
 
 .progress-line {
     display: flex;

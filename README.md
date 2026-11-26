@@ -42,6 +42,11 @@ run on any Tizen TV from 2015 onwards.
 - **Browse** — Continue Watching hero, a latest row per library, full library
   grids, details with seasons and episodes, unified search, and Discover
   (Jellyseerr / Overseerr, see [Connecting Seerr](#connecting-seerr)).
+- **Filter and Favorites** — every library has a **Filter** button next to Sort:
+  show everything, only unwatched, only watched or only favorites, and optionally
+  narrow to one genre. The choice is remembered per library. The star tab in the
+  top bar lists everything you have favorited, across all libraries, with the
+  same Sort and Filter controls.
 - **Play** — Samsung AVPlay hardware decoding with an HTML5 fallback, automatic
   transcode retry when direct play fails, up-next autoplay, resume positions and
   watched state.
@@ -280,7 +285,7 @@ js/player.js    AVPlay + HTML5 playback engine, stall watchdog
 js/audio.js     audio track choice, language matching, AVPlay track mapping
 js/subtitles.js WebVTT parsing and the cue overlay
 js/syncplay.js  SyncPlay group, queue, time sync, commands, drift
-js/screens/     setup, home, library, detail, player (+ audio picker), search, discover, syncplay, settings
+js/screens/     setup, home, library (+ filter, favorites), detail, player (+ audio picker), search, discover, syncplay, settings
 scripts/        build, install, signing setup, dev server
 test/           smoke, live, syncplay, osd, profile
 ```

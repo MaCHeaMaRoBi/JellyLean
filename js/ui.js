@@ -574,7 +574,7 @@
     }
 
     /* The top tab bar. `current` is one of: home, search, discover, settings,
-       syncplay, or library:<id>. Libraries and Discover arrive asynchronously;
+       syncplay, favorites, or library:<id>. Libraries and Discover arrive asynchronously;
        the bar is usable immediately and fills in. */
     function nav(options) {
         var opts = options || {};
@@ -632,6 +632,12 @@
 
         var state = { libraries: opts.libraries || [], discover: false };
         paint(state.libraries, false);
+
+        right.appendChild(tab({
+            key: 'favorites', label: 'Favorites', icon: 'star', iconOnly: true,
+            current: current === 'favorites',
+            onClick: function () { App.tab('favorites'); }
+        }));
 
         var group = SyncPlay.getGroup && SyncPlay.getGroup();
         right.appendChild(tab({

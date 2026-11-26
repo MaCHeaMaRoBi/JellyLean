@@ -451,6 +451,106 @@ async function main() {
         check('direction toggles and persists',
             /High to low/.test(await evaluate("document.activeElement.textContent")));
 
+        /* ---- filter: a third control after the direction toggle -------- */
+        await press('ArrowRight', 39);
+        check('right from the direction toggle reaches Filter',
+            (await evaluate("document.activeElement.textContent")) === 'Filter');
+        await press('Enter', 13);
+        await waitFor("(document.querySelector('h1.title') || {}).textContent === 'Filter'", 'filter screen');
+        await waitFor("document.querySelectorAll('[data-key^=\"flt-genre:\"]').length > 0", 'genre rows');
+        check('the filter screen lists the shows and this library\'s genres',
+            (await evaluate("document.querySelectorAll('[data-key^=\"flt-show-\"]').length")) === 4 &&
+            (await evaluate("document.querySelectorAll('[data-key^=\"flt-genre:\"]').length")) === 4);
+        check('All is the choice to begin with',
+            (await evaluate("document.querySelector('[data-key=\"flt-show-all\"] .pill').textContent")) === 'Selected');
+        await capture('04b-filter');
+
+        await press('ArrowDown', 40);
+        await press('ArrowDown', 40);
+        check('down moves through the Show choices',
+            (await evaluate("document.activeElement.getAttribute('data-key')")) === 'flt-show-played');
+        await press('Enter', 13);
+        await waitFor("(Store.get('libraryFilter:lib-movies') || {}).show === 'played'", 'show choice saved');
+        check('choosing Watched marks it and saves it for the library',
+            (await evaluate("document.querySelector('[data-key=\"flt-show-played\"] .pill').textContent")) === 'Selected' &&
+            (await evaluate("document.querySelector('[data-key=\"flt-show-all\"] .pill').textContent")) === '');
+
+        await press('Unidentified', 10009);
+        await waitFor("document.body.innerText.indexOf('Nothing matches these filters') !== -1", 'empty filtered list');
+        check('a filter with no matches says so and offers to clear it',
+            !!(await evaluate("document.querySelector('[data-key=\"lib-clear\"]')")));
+        check('Filter counts what is active',
+            (await evaluate("document.querySelector('[data-key=\"lib-filter\"]').textContent")) === 'Filter \u00b7 1');
+        await capture('04c-filter-empty');
+
+        check('BACK from the filter screen lands on the Filter button again',
+            (await evaluate("document.activeElement.getAttribute('data-key')")) === 'lib-filter');
+        await press('ArrowDown', 40);
+        await waitFor("document.activeElement && document.activeElement.getAttribute('data-key') === 'lib-clear'", 'clear focus');
+        await press('Enter', 13);
+        await waitFor("document.querySelectorAll('.grid .card').length > 0", 'grid after clearing');
+        check('Clear Filters brings the list back and forgets the choice',
+            (await evaluate("(Store.get('libraryFilter:lib-movies') || {}).show")) === 'all');
+
+        /* A genre, picked from further down the same list. */
+        await press('ArrowUp', 38);
+        await press('ArrowRight', 39);
+        await press('ArrowRight', 39);
+        await press('Enter', 13);
+        await waitFor("document.querySelectorAll('[data-key^=\"flt-genre:\"]').length > 0", 'genre rows again');
+        for (var step = 0; step < 4; step++) await press('ArrowDown', 40);
+        check('down crosses from the Show choices into the genres',
+            (await evaluate("document.activeElement.getAttribute('data-key')")) === 'flt-genre:any');
+        await evaluate("document.querySelector('[data-key=\"flt-genre:Comedy\"]').focus(); true");
+        await press('Enter', 13);
+        await waitFor("(Store.get('libraryFilter:lib-movies') || {}).genre === 'Comedy'", 'genre saved');
+        await press('Unidentified', 10009);
+        await waitFor("document.querySelectorAll('.grid .card').length === 1 &&" +
+            " /Comedy/.test(document.querySelector('.page-head .count').textContent)", 'genre-filtered grid');
+        check('a genre narrows the grid and is named under the title', true);
+
+        /* Turn it off again through the same screen; focus is still on Filter. */
+        await press('Enter', 13);
+        await waitFor("document.querySelectorAll('[data-key^=\"flt-genre:\"]').length > 0", 'genre rows third time');
+        await evaluate("document.querySelector('[data-key=\"flt-genre:any\"]').focus(); true");
+        await press('Enter', 13);
+        await press('Unidentified', 10009);
+        await waitFor("document.querySelectorAll('.grid .card').length > 0 &&" +
+            " !/Comedy/.test(document.querySelector('.page-head .count').textContent)", 'unfiltered grid');
+        check('Any genre clears the genre',
+            (await evaluate("(Store.get('libraryFilter:lib-movies') || {}).genre")) === '');
+
+        /* ---- Favorites: every starred title, across libraries ----------- */
+        await evaluate("App.tab('favorites'); true");
+        await waitFor("(document.querySelector('h1.title') || {}).textContent === 'Favorites'", 'favorites screen');
+        await waitFor("document.body.innerText.indexOf('No favorites yet') !== -1", 'empty favorites');
+        check('Favorites explains itself while it is empty', true);
+        check('the Favorites tab is the current one',
+            !!(await evaluate("document.querySelector('.tab.current[data-nav=\"favorites\"]')")));
+
+        await evaluate("Api.setFavorite('movie1', true).then(function () { return true; })");
+        await evaluate("App.tab('favorites'); true");
+        await waitFor("document.querySelectorAll('.grid .card').length === 1", 'one favorite');
+        check('Favorites lists only the starred titles',
+            (await evaluate("document.querySelector('.grid .card')._item.Name")) === 'Big Buck Bunny');
+        await capture('04d-favorites');
+
+        await evaluate("document.querySelector('[data-key=\"lib-filter\"]').click(); true");
+        await waitFor("(document.querySelector('h1.title') || {}).textContent === 'Filter'", 'favorites filter screen');
+        check('Favorites offers no Favorites choice of its own',
+            (await evaluate("document.querySelectorAll('[data-key^=\"flt-show-\"]').length")) === 3 &&
+            !(await evaluate("document.querySelector('[data-key=\"flt-show-favorites\"]')")));
+        await press('Unidentified', 10009);
+        await waitFor("(document.querySelector('h1.title') || {}).textContent === 'Favorites'", 'back on favorites');
+
+        await evaluate("Api.setFavorite('movie1', false).then(function () { return true; })");
+
+        /* Back to the Movies library, focus on the controls as before. */
+        await evaluate("App.tab('library', { parentId: 'lib-movies', title: 'Movies', top: true }); true");
+        await waitFor("document.querySelectorAll('.grid .card').length > 0", 'movies again');
+        await waitFor("document.activeElement && document.activeElement.classList.contains('card')", 'movies focus');
+        await press('ArrowUp', 38);
+
         await waitFor("document.querySelectorAll('.grid .card').length > 0", 'grid after sort');
         await press('ArrowDown', 40);
         await waitFor("document.activeElement && document.activeElement.classList.contains('card')",

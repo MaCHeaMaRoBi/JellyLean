@@ -6,7 +6,7 @@
     var CLIENT_NAME = 'JellyLean';
     /* Must equal the widget version in config.xml; scripts/build.sh fails the
        build when they differ. */
-    var CLIENT_VERSION = '1.0.12';
+    var CLIENT_VERSION = '1.0.13';
 
     /* What the browse screens need to draw a card and the Home stage: art for
        every role (backdrop and logo feed the ambient stage) and the text that
@@ -511,11 +511,33 @@
                 StartIndex: opts.startIndex || 0,
                 Limit: opts.limit || 100,
                 SearchTerm: opts.searchTerm,
+                /* Jellyfin's own vocabulary (IsUnplayed, IsPlayed, IsFavorite).
+                   An array goes out as repeated keys, which 12.x requires. */
+                Filters: opts.filters,
+                /* One genre name; Jellyfin reads this list pipe-delimited. */
+                Genres: opts.genres,
                 Fields: LIST_FIELDS,
                 ImageTypeLimit: 1,
                 EnableImageTypes: LIST_IMAGES,
                 EnableTotalRecordCount: true
             });
+        },
+
+        /* The genre names in use under one parent (a library), or among the
+           viewer's favorites. Names only, so the request stays small. */
+        genres: function (options) {
+            var opts = options || {};
+            return request('GET', '/Genres', null, {
+                UserId: state.userId,
+                ParentId: opts.parentId,
+                IncludeItemTypes: opts.includeItemTypes,
+                IsFavorite: opts.favorites ? true : undefined,
+                SortBy: 'SortName',
+                SortOrder: 'Ascending',
+                Recursive: true,
+                EnableImages: false,
+                EnableTotalRecordCount: false
+            }).then(function (result) { return (result && result.Items) || []; });
         },
 
         item: function (itemId) {
