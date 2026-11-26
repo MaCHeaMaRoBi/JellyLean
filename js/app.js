@@ -568,7 +568,23 @@
         go('setup', {}, true);
     };
 
+    /* Tizen 2.3/2.4 (2015-2016 TVs) run WebKit r152340, which has neither
+       Promise nor fetch: the first request throws before it leaves the TV, so
+       Connect looks dead and the server sees nothing. Say why instead. */
+    function tooOldTv() {
+        if (global.Promise && global.fetch) return '';
+        var match = /Tizen\s+([\d.]+)/i.exec(global.navigator.userAgent || '');
+        return 'This TV runs ' + (match ? 'Tizen ' + match[1] : 'a browser') +
+            ' without Promise and fetch.\nJellyLean needs Tizen 3.0 (2017) or newer.';
+    }
+
     App.init = function () {
+        var unsupported = tooOldTv();
+        if (unsupported) {
+            if (global.__bootLog) global.__bootLog(unsupported);
+            return;
+        }
+
         root = U.$('#app');
         U.listen();
         if (!root) {

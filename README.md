@@ -6,7 +6,7 @@
   **A light, remote-first Jellyfin client for Samsung Tizen TVs.**
 
   [![Latest release](https://img.shields.io/github/v/release/MaCHeaMaRoBi/JellyLean?style=flat-square&label=release)](../../releases/latest)
-  ![Tizen 2.3+](https://img.shields.io/badge/Tizen-2.3%2B-1428A0?style=flat-square)
+  ![Tizen 3.0+](https://img.shields.io/badge/Tizen-3.0%2B-1428A0?style=flat-square)
   ![Jellyfin 10.9+](https://img.shields.io/badge/Jellyfin-10.9%2B-00A4DC?style=flat-square)
   ![Vibe-coded](https://img.shields.io/badge/vibe--coded-with%20AI-ff69b4?style=flat-square)
   [![MIT license](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
@@ -74,7 +74,7 @@ run on any Tizen TV from 2015 onwards.
 
 | Component | Requirement |
 | --- | --- |
-| **TV** | Tizen 2.3 or newer (targets the `tv` profile, Tizen 3.0), developer mode enabled, and a network path to your Jellyfin server. |
+| **TV** | Tizen 3.0 or newer (2017+). The 2015-2016 sets run Tizen 2.3/2.4 on WebKit r152340, which has no `Promise` or `fetch`, so the client cannot talk to a server there and says so on screen. Developer mode enabled, and a network path to your Jellyfin server. |
 | **Server** | Jellyfin 10.9 or newer, verified against 12.4.0. SyncPlay needs 10.8+; Media Segments need 10.10+. For Skip Intro on 10.8/10.9, install the [Intro Skipper](https://github.com/jellyfin/jellyfin-plugin-intros) plugin. |
 | **Build machine** | Tizen Studio CLI (`web-cli_Tizen_Studio_6.1`), `zip`, and Node.js 18+ for the dev server and tests. |
 

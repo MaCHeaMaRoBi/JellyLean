@@ -1317,6 +1317,21 @@ async function main() {
         check('the panel stays away once the slow UI paints',
             (await evaluate("!document.getElementById('bootError')")) === true);
 
+        /* ---- an old TV: say why, instead of a dead Connect -------------- */
+
+        /* 2015-2016 sets (Tizen 2.3/2.4, WebKit r152340) have neither Promise
+           nor fetch, so the first request throws before it leaves the TV. */
+        await cdp.send('Page.addScriptToEvaluateOnNewDocument', {
+            source: "window.Promise = undefined; window.fetch = undefined;"
+        });
+        await cdp.send('Page.navigate', { url: APP_URL });
+        await waitFor("!!document.getElementById('bootError')", 'unsupported-TV panel', 20000);
+        check('a TV without Promise/fetch is told why, not left on a dead form',
+            (await evaluate("(document.getElementById('bootError') || {}).textContent || ''"))
+                .indexOf('Tizen 3.0') !== -1);
+        check('the unsupported TV never reaches the setup form',
+            (await evaluate("!document.querySelector('#serverUrl')")) === true);
+
         await sleep(300);
 
         if (errors.length) {
