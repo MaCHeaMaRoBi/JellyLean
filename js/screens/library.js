@@ -1,5 +1,6 @@
-/* Library / folder browsing: poster grid by whole rows, one Sort control,
-   incremental paging as focus nears the bottom. */
+/* Library / folder browsing: poster grid by whole rows, Sort and Filter
+   controls, incremental paging as focus nears the bottom. The Favorites tab is
+   this same screen with the favorites filter fixed on. */
 (function (global) {
     'use strict';
 
@@ -23,15 +24,77 @@
         return SORTS[0];
     }
 
+    /* What to show. Each id maps to one of Jellyfin's Filters values. */
+    var SHOWS = [
+        { id: 'all', label: 'All', filter: null },
+        { id: 'unplayed', label: 'Unwatched', filter: 'IsUnplayed' },
+        { id: 'played', label: 'Watched', filter: 'IsPlayed' },
+        { id: 'favorites', label: 'Favorites', filter: 'IsFavorite' }
+    ];
+
+    function filterPrefKey(scope) { return 'libraryFilter:' + scope; }
+
+    function showOf(id) {
+        for (var i = 0; i < SHOWS.length; i++) if (SHOWS[i].id === id) return SHOWS[i];
+        return SHOWS[0];
+    }
+
+    /* The Favorites screen is already "only favorites", so it offers no
+       Favorites choice of its own. */
+    function showsFor(favoritesOnly) {
+        return SHOWS.filter(function (show) { return !(favoritesOnly && show.id === 'favorites'); });
+    }
+
+    function loadFilter(scope, favoritesOnly) {
+        var saved = Store.get(filterPrefKey(scope), null) || {};
+        var show = showOf(saved.show).id;
+        if (favoritesOnly && show === 'favorites') show = 'all';
+        return { show: show, genre: saved.genre ? String(saved.genre) : '' };
+    }
+
+    function saveFilter(scope, filter) {
+        Store.set(filterPrefKey(scope), { show: filter.show, genre: filter.genre });
+    }
+
+    function isFiltered(filter) { return filter.show !== 'all' || !!filter.genre; }
+
+    /* The Filters values to send. */
+    function queryFilters(filter, favoritesOnly) {
+        var list = [];
+        var chosen = showOf(filter.show).filter;
+        if (chosen) list.push(chosen);
+        if (favoritesOnly && list.indexOf('IsFavorite') === -1) list.push('IsFavorite');
+        return list;
+    }
+
+    /* Words for the count line: "Unwatched", "Action". */
+    function describeFilter(filter) {
+        var words = [];
+        if (filter.show !== 'all') words.push(showOf(filter.show).label);
+        if (filter.genre) words.push(filter.genre);
+        return words;
+    }
+
     function openItem(item) {
         if (UI.isFolder(item)) App.go('library', { parentId: item.Id, title: item.Name });
         else App.go('detail', { itemId: item.Id, item: item });
     }
 
     window.Screens.library = {
+        /* Shared with the filter screen, which edits the same saved choice. */
+        filter: {
+            shows: showsFor,
+            load: loadFilter,
+            save: saveFilter
+        },
+
         render: function (container, params) {
             var title = params.title || 'Library';
             var parentId = params.parentId;
+            /* A library is remembered by its id; the Favorites screen has no
+               parent, so it names its own scope. */
+            var scope = params.scope || parentId;
+            var favoritesOnly = params.favorites === true;
             var startIndex = 0;
             var total = 0;
             var loading = false;
@@ -40,12 +103,14 @@
 
             /* The first visit uses the caller's sort, then remembers whatever
                was chosen for this specific library. */
-            var saved = Store.get(sortPrefKey(parentId), null) || {};
+            var saved = Store.get(sortPrefKey(scope), null) || {};
             var sortBy = saved.sortBy || params.sortBy || 'SortName';
             var sortOrder = saved.sortOrder || 'Ascending';
+            var filter = loadFilter(scope, favoritesOnly);
 
-            var shell = UI.screenShell({ nav: params.top ? 'library:' + parentId : null });
-            if (!params.top) shell.screen.className += ' deep';
+            var navKey = params.nav || (params.top ? 'library:' + parentId : null);
+            var shell = UI.screenShell({ nav: navKey });
+            if (!navKey) shell.screen.className += ' deep';
             container.appendChild(shell.screen);
             UI.startClock();
 
@@ -72,8 +137,16 @@
                 reset();
             } });
             dirBtn.className += ' sm';
+            var filterBtn = UI.button({ label: 'Filter', icon: 'filter', key: 'lib-filter', onClick: function () {
+                App.go('libraryFilter', {
+                    scope: scope, title: title, parentId: parentId,
+                    favorites: favoritesOnly, includeItemTypes: params.includeItemTypes
+                });
+            } });
+            filterBtn.className += ' sm';
             controls.appendChild(sortBtn);
             controls.appendChild(dirBtn);
+            controls.appendChild(filterBtn);
             head.appendChild(controls);
             shell.scroll.appendChild(head);
 
@@ -85,13 +158,29 @@
             }
             paintSort();
 
+            function paintFilter() {
+                var active = describeFilter(filter).length;
+                filterBtn.labelNode.textContent = active ? 'Filter \u00b7 ' + active : 'Filter';
+                filterBtn.setAttribute('aria-label', active
+                    ? 'Filter, ' + describeFilter(filter).join(', ') + '. Press OK to change.'
+                    : 'Filter. Press OK to choose what to show.');
+            }
+            paintFilter();
+
+            function clearFilter() {
+                filter = { show: 'all', genre: '' };
+                saveFilter(scope, filter);
+                paintFilter();
+                reset();
+            }
+
             var grid = U.el('div', 'grid');
             shell.scroll.appendChild(grid);
             var footer = U.el('div', 'grid-foot');
             shell.scroll.appendChild(footer);
 
             function persistSort() {
-                Store.set(sortPrefKey(parentId), { sortBy: sortBy, sortOrder: sortOrder });
+                Store.set(sortPrefKey(scope), { sortBy: sortBy, sortOrder: sortOrder });
             }
 
             function addCards(items) {
@@ -136,7 +225,10 @@
                     limit: PAGE,
                     sortBy: sortBy,
                     sortOrder: sortOrder,
-                    recursive: params.recursive === true
+                    recursive: params.recursive === true,
+                    includeItemTypes: params.includeItemTypes,
+                    filters: queryFilters(filter, favoritesOnly),
+                    genres: filter.genre
                 }).then(function (result) {
                     if (mine !== loadToken) return;
                     var items = (result && result.Items) || [];
@@ -147,11 +239,23 @@
                     U.clear(footer);
                     addCards(items);
 
+                    var words = describeFilter(filter);
                     counter.textContent = total
-                        ? total + (total === 1 ? ' title' : ' titles') : '';
+                        ? total + (total === 1 ? ' title' : ' titles') +
+                            (words.length ? '  \u00b7  ' + words.join('  \u00b7  ') : '') : '';
 
                     if (!grid.firstChild && !pending.length) {
-                        footer.appendChild(UI.empty('This library is empty.'));
+                        if (isFiltered(filter)) {
+                            footer.appendChild(UI.empty('Nothing matches these filters.'));
+                            var clearBtn = UI.button({
+                                label: 'Clear Filters', icon: 'refresh', primary: true,
+                                key: 'lib-clear', onClick: clearFilter
+                            });
+                            clearBtn.setAttribute('data-autofocus', '');
+                            footer.appendChild(UI.buttonRow([clearBtn], { className: 'pad' }));
+                        } else {
+                            footer.appendChild(UI.empty(params.emptyText || 'This library is empty.'));
+                        }
                     }
 
                     loading = false;
@@ -187,6 +291,24 @@
             }, true);
 
             loadMore(false);
+        },
+
+        destroy: function () {}
+    };
+
+    /* The Favorites tab: everything the viewer has starred, across every
+       library, in the same grid with the same Sort and Filter controls. */
+    window.Screens.favorites = {
+        render: function (container) {
+            window.Screens.library.render(container, {
+                title: 'Favorites',
+                nav: 'favorites',
+                scope: 'favorites',
+                favorites: true,
+                recursive: true,
+                includeItemTypes: ['Movie', 'Series', 'Season', 'Episode', 'BoxSet'],
+                emptyText: 'No favorites yet. Open a movie or show and choose Favorite to add it here.'
+            });
         },
 
         destroy: function () {}

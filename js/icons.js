@@ -63,6 +63,7 @@
 
         sort: '<path d="M7 5v14M7 19l-3-3M7 19l3-3"/><path d="M17 19V5M17 5l-3 3M17 5l3 3"/>',
         swap: '<path d="M5 8h13M18 8l-3-3M18 8l-3 3"/><path d="M19 16H6M6 16l3-3M6 16l3 3"/>',
+        filter: '<path d="M4 6h16l-6 7.2V19l-4-2v-3.8z"/>',
         film: '<rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="M8 4.5v15M16 4.5v15M3.5 9.5H8M3.5 14.5H8M16 9.5h4.5M16 14.5h4.5"/>',
         music: '<path d="M9 18V6l10-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/>',
         folder: '<path d="M3.5 7.5a2 2 0 0 1 2-2h4l2 2.5h7a2 2 0 0 1 2 2v7.5a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/>',

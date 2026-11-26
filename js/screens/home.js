@@ -35,6 +35,10 @@
             shown = item;
             U.clear(info);
 
+            var position = item.UserData && item.UserData.PlaybackPositionTicks;
+            var showsProgress = !!(isFeatured && position && item.RunTimeTicks);
+            info.className = 'stage-info' + (showsProgress ? ' has-progress' : '');
+
             shell.backdrop.set(UI.backdropUrl(item, 1920));
             info.appendChild(UI.titleBlock(item, 'stage-title'));
 
@@ -45,8 +49,7 @@
 
             if (item.Overview) info.appendChild(U.el('p', 'overview', item.Overview));
 
-            var position = item.UserData && item.UserData.PlaybackPositionTicks;
-            if (isFeatured && position && item.RunTimeTicks) {
+            if (showsProgress) {
                 var line = U.el('div', 'progress-line');
                 var track = U.el('div', 'track');
                 var fill = document.createElement('i');
@@ -79,7 +82,12 @@
                shelf does not thrash image requests. */
             follow: function (item) {
                 if (timer) clearTimeout(timer);
-                timer = setTimeout(function () { paint(item, false); }, STAGE_DELAY);
+                timer = setTimeout(function () {
+                    /* The featured item's own card keeps the Resume / More Info
+                       buttons; otherwise Up from that card has nothing to land on. */
+                    if (featured && item.Id === featured.Id) paint(featured, true);
+                    else paint(item, false);
+                }, STAGE_DELAY);
             },
             returnToFeatured: function () {
                 if (timer) clearTimeout(timer);

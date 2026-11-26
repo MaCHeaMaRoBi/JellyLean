@@ -123,6 +123,40 @@ var ITEMS = {};
 [MOVIE, SERIES, SEASON0, SEASON, EPISODE, EPISODE2, SPECIAL].concat(SIMILAR).forEach(function (item) { ITEMS[item.Id] = item; });
 (MOVIE.People || []).forEach(function (person) { ITEMS[person.Id] = person; });
 
+/* Favorite and watched marks the client sets. They live here, not on the item
+   literals, so the catalogue the other tests count stays as written; a listing
+   or a detail request lays them over the item on the way out. */
+var FAVORITE_MARKS = {};
+var PLAYED_MARKS = {};
+
+function marked(item) {
+    if (!item || (FAVORITE_MARKS[item.Id] === undefined && PLAYED_MARKS[item.Id] === undefined)) return item;
+    var copy = Object.assign({}, item);
+    copy.UserData = Object.assign({}, item.UserData || {});
+    if (FAVORITE_MARKS[item.Id] !== undefined) copy.UserData.IsFavorite = FAVORITE_MARKS[item.Id];
+    if (PLAYED_MARKS[item.Id] !== undefined) copy.UserData.Played = PLAYED_MARKS[item.Id];
+    return copy;
+}
+
+/* What a listing under `parentId` holds: a library's titles, a series' seasons
+   and episodes, or the whole catalogue when there is no parent (the Favorites
+   screen asks that way). */
+function catalogueFor(parentId) {
+    if (parentId === MOVIES_LIB.Id) return [MOVIE].concat(RICH_MOVIES);
+    if (parentId === TV_LIB.Id) return [SERIES].concat(RICH_SERIES);
+    if (parentId === SERIES.Id || parentId === SEASON.Id) return [SEASON, EPISODE, EPISODE2];
+    return [MOVIE, SERIES, SEASON0, SEASON, EPISODE, EPISODE2, SPECIAL].concat(RICH_MOVIES, RICH_SERIES);
+}
+
+/* A query list, whether sent as repeated keys or as one comma-joined value. */
+function listParam(url, name) {
+    var out = [];
+    url.searchParams.getAll(name).forEach(function (value) {
+        value.split(',').forEach(function (part) { if (part) out.push(part); });
+    });
+    return out;
+}
+
 
 /* ---------------------------------------------------------- rich catalogue
    RICH=1 fills the library with enough titles, artwork and progress to judge a
@@ -565,7 +599,7 @@ async function handleApi(req, res, url) {
         pathname === '/GetUtcTime';
 
     /* Only the API is guarded; the app's own static files must stay reachable. */
-    var isApiPath = /^\/(Users|Items|Shows|MediaSegments|Episode|SyncPlay|Sessions|Videos|System|PlaybackInfo|GetUtcTime|QuickConnect)\b/.test(pathname);
+    var isApiPath = /^\/(Users|Items|Genres|Shows|MediaSegments|Episode|SyncPlay|Sessions|Videos|System|PlaybackInfo|GetUtcTime|QuickConnect)\b/.test(pathname);
 
     if (isApiPath && !anonymous && requestToken(req, url) !== TOKEN) {
         res.writeHead(401, { 'Content-Length': '0' });
@@ -626,12 +660,7 @@ async function handleApi(req, res, url) {
     }
 
     if (/^\/Users\/[^/]+\/Items$/.test(pathname) && method === 'GET') {
-        var parentId = url.searchParams.get('ParentId');
-        var items;
-        if (parentId === MOVIES_LIB.Id) items = [MOVIE].concat(RICH_MOVIES);
-        else if (parentId === TV_LIB.Id) items = [SERIES].concat(RICH_SERIES);
-        else if (parentId === SERIES.Id || parentId === SEASON.Id) items = [SEASON, EPISODE, EPISODE2];
-        else items = [MOVIE, SERIES].concat(RICH_MOVIES, RICH_SERIES);
+        var items = catalogueFor(url.searchParams.get('ParentId')).map(marked);
 
         /* The unified search screen sends SearchTerm; without filtering here
            every query would return the whole mock catalogue. */
@@ -643,12 +672,51 @@ async function handleApi(req, res, url) {
             });
         }
 
-        var include = url.searchParams.get('IncludeItemTypes');
-        if (include) {
-            var allowed = include.split(',');
+        /* Repeated keys (what the client sends) and comma lists both work. */
+        var allowed = listParam(url, 'IncludeItemTypes');
+        if (allowed.length) {
             items = items.filter(function (item) { return allowed.indexOf(item.Type) !== -1; });
         }
+
+        /* Filters are ANDed, as on Jellyfin. */
+        listParam(url, 'Filters').forEach(function (name) {
+            items = items.filter(function (item) {
+                var data = item.UserData || {};
+                if (name === 'IsFavorite') return data.IsFavorite === true;
+                if (name === 'IsPlayed') return data.Played === true;
+                if (name === 'IsUnplayed') return data.Played !== true;
+                return true;
+            });
+        });
+
+        var wantedGenre = url.searchParams.get('Genres');
+        if (wantedGenre) {
+            items = items.filter(function (item) {
+                return (item.Genres || []).indexOf(wantedGenre) !== -1;
+            });
+        }
+
         json(res, 200, { Items: items, TotalRecordCount: items.length, StartIndex: 0 });
+        return true;
+    }
+
+    /* Genre names in use under a parent, optionally among favorites only. */
+    if (pathname === '/Genres' && method === 'GET') {
+        var genreSource = catalogueFor(url.searchParams.get('ParentId')).map(marked);
+        if (url.searchParams.get('IsFavorite') === 'true') {
+            genreSource = genreSource.filter(function (item) { return (item.UserData || {}).IsFavorite === true; });
+        }
+        var genreNames = [];
+        genreSource.forEach(function (item) {
+            (item.Genres || []).forEach(function (name) {
+                if (genreNames.indexOf(name) === -1) genreNames.push(name);
+            });
+        });
+        genreNames.sort();
+        json(res, 200, {
+            Items: genreNames.map(function (name) { return { Id: 'genre-' + name, Name: name, Type: 'Genre' }; }),
+            TotalRecordCount: genreNames.length
+        });
         return true;
     }
 
@@ -656,7 +724,7 @@ async function handleApi(req, res, url) {
     if (parts) {
         var found = ITEMS[parts[1]];
         if (!found) { json(res, 404, { Message: 'Item not found' }); return true; }
-        json(res, 200, found);
+        json(res, 200, marked(found));
         return true;
     }
 
@@ -1058,11 +1126,19 @@ async function handleApi(req, res, url) {
 
     if (pathname.indexOf('/Sessions/Playing') === 0) { noContent(res); return true; }
 
-    parts = /^\/Users\/[^/]+\/PlayedItems\/[^/]+$/.exec(pathname);
-    if (parts) { noContent(res); return true; }
+    parts = /^\/Users\/[^/]+\/PlayedItems\/([^/]+)$/.exec(pathname);
+    if (parts) {
+        PLAYED_MARKS[parts[1]] = method !== 'DELETE';
+        noContent(res);
+        return true;
+    }
 
-    parts = /^\/Users\/[^/]+\/FavoriteItems\/[^/]+$/.exec(pathname);
-    if (parts) { noContent(res); return true; }
+    parts = /^\/Users\/[^/]+\/FavoriteItems\/([^/]+)$/.exec(pathname);
+    if (parts) {
+        FAVORITE_MARKS[parts[1]] = method !== 'DELETE';
+        noContent(res);
+        return true;
+    }
 
     parts = /^\/Videos\/([^/]+)\/([^/]+)\/Subtitles\/(\d+)\/Stream\.vtt$/.exec(pathname);
     if (parts) {
