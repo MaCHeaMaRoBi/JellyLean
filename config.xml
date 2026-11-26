@@ -4,7 +4,7 @@
 
     <access origin="*" subdomains="true"/>
 
-    <tizen:application id="jflean0001.JellyfinLean" package="jflean0001" required_version="2.3"/>
+    <tizen:application id="jflean0001.JellyfinLean" package="jflean0001" required_version="3.0"/>
 
     <author href="https://github.com/MaCHeaMaRoBi/JellyLean">JellyLean</author>
     <name>JellyLean</name>

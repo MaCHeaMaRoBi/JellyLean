@@ -66,7 +66,7 @@ exists (gitignored).
 
 1. Bump `version` in `config.xml` and `CLIENT_VERSION` in `js/api.js` together (the build guards version drift).
 2. `scripts/build.sh`.
-3. Verify `dist/JellyLean.wgt`: version, app/package ids, `required_version="2.3"`, both author and distributor signatures, sha256.
+3. Verify `dist/JellyLean.wgt`: version, app/package ids, `required_version="3.0"` (Tizen 2.3/2.4 sets have no Promise or fetch), both author and distributor signatures, sha256.
 4. Commit, `git fetch`/rebase, push `main`, tag `vX.Y.Z`, push the tag.
 5. Create the GitHub release **as a draft**, attach the asset named exactly
    `JellyLean.wgt` (Apps2Samsung catalog sync matches that name), download it back
